@@ -1,0 +1,938 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <link rel="icon" href="data:,">
+  <title>Tool Call Trace | Tinkora</title>
+  <style>
+    :root {
+      --bg: #f4f6f4;
+      --surface: #ffffff;
+      --surface-muted: #eef1ee;
+      --border: #cfd5d0;
+      --border-strong: #9ca69f;
+      --text: #1d2420;
+      --text-muted: #59635d;
+      --primary: #176b55;
+      --primary-hover: #115743;
+      --focus: #2563eb;
+      --success: #248a5a;
+      --error: #c73e3a;
+      --warning: #9a6700;
+      --pending: #68737c;
+      --cancelled: #7d6b91;
+      --label-width: 128px;
+      --bar-height: 26px;
+      --bar-gap: 5px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body { margin: 0; min-width: 320px; min-height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button, textarea { font: inherit; }
+
+    button, a, textarea { -webkit-tap-highlight-color: transparent; }
+
+    button:focus-visible,
+    textarea:focus-visible,
+    a:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+      height: 100dvh;
+    }
+
+    #header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 52px;
+      padding: 9px 18px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .brand-owner {
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+
+    #header h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 680;
+      line-height: 1.25;
+    }
+
+    .runtime-status {
+      flex: 0 0 auto;
+      color: var(--text-muted);
+      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+    }
+
+    #main {
+      display: flex;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    #input-panel {
+      display: flex;
+      flex: 0 0 420px;
+      flex-direction: column;
+      min-width: 320px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+    }
+
+    .panel-heading {
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-heading h2 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 680;
+    }
+
+    #trace-form {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 0;
+      padding: 12px 16px 16px;
+    }
+
+    .control-label {
+      display: block;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    #format-selector {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 4px;
+      padding: 3px;
+      background: var(--surface-muted);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+
+    #format-selector button {
+      min-height: 34px;
+      padding: 6px 10px;
+      color: var(--text-muted);
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 650;
+      transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+    }
+
+    #format-selector button[aria-pressed="true"] {
+      color: var(--text);
+      background: var(--surface);
+      border-color: var(--border-strong);
+    }
+
+    #format-selector button:hover { color: var(--text); }
+
+    #json-input {
+      flex: 1 1 auto;
+      min-height: 220px;
+      width: 100%;
+      padding: 11px 12px;
+      resize: vertical;
+      color: var(--text);
+      background: #fafcfa;
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      tab-size: 2;
+    }
+
+    #json-input:focus-visible { border-color: var(--focus); }
+
+    #analyze-button {
+      min-height: 40px;
+      padding: 9px 14px;
+      color: #ffffff;
+      background: var(--primary);
+      border: 1px solid var(--primary);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      transition: background-color 160ms ease;
+    }
+
+    #analyze-button:hover { background: var(--primary-hover); }
+    #analyze-button:disabled { cursor: wait; opacity: 0.65; }
+
+    #error-message {
+      display: none;
+      margin: 0;
+      padding: 9px 10px;
+      color: #8f2926;
+      background: #fff1f0;
+      border: 1px solid #e7aaa7;
+      border-radius: 4px;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    #error-message.visible { display: block; }
+
+    #results-panel {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    #stats-bar {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(74px, 1fr));
+      gap: 1px;
+      margin: 0;
+      background: var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    #stats-bar > div {
+      min-width: 0;
+      padding: 9px 8px;
+      text-align: center;
+      background: var(--surface);
+    }
+
+    #stats-bar dt {
+      margin-top: 2px;
+      color: var(--text-muted);
+      font-size: 10px;
+      line-height: 1.25;
+    }
+
+    #stats-bar dd {
+      min-height: 24px;
+      margin: 0;
+      overflow: hidden;
+      color: var(--text);
+      font-size: 18px;
+      font-weight: 720;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #stat-errors, #stat-error-rate { color: var(--error); }
+    #stat-slowest { color: var(--warning); }
+
+    #insights-bar {
+      display: none;
+      align-items: center;
+      gap: 18px;
+      min-height: 34px;
+      padding: 7px 16px;
+      color: var(--text-muted);
+      background: #fffdf5;
+      border-bottom: 1px solid #e5d7a6;
+      font-size: 11px;
+    }
+
+    #insights-bar.visible { display: flex; }
+    #insights-bar strong { color: var(--text); }
+
+    #legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      padding: 8px 18px;
+      color: var(--text-muted);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+    }
+
+    #legend span { display: inline-flex; align-items: center; gap: 5px; }
+
+    .legend-marker {
+      width: 9px;
+      height: 9px;
+      border-radius: 2px;
+    }
+
+    .success { --status-color: var(--success); }
+    .error { --status-color: var(--error); }
+    .pending { --status-color: var(--pending); }
+    .cancelled { --status-color: var(--cancelled); }
+    .legend-marker { background: var(--status-color); }
+
+    #time-axis {
+      display: flex;
+      justify-content: space-between;
+      min-height: 26px;
+      padding: 8px 18px 4px calc(var(--label-width) + 18px);
+      color: var(--text-muted);
+      background: var(--surface);
+      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      font-size: 10px;
+    }
+
+    #timeline {
+      flex: 1 1 auto;
+      min-height: 0;
+      padding: 12px 18px 20px;
+      overflow: auto;
+      background: var(--bg);
+    }
+
+    #empty-state {
+      display: grid;
+      min-height: 100%;
+      place-items: center;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .trace-row {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      min-height: var(--bar-height);
+      margin: 0 0 var(--bar-gap);
+      padding: 0;
+      color: inherit;
+      background: transparent;
+      border: 0;
+      border-radius: 3px;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .trace-row:hover { background: #e8ece8; }
+
+    .row-label {
+      flex: 0 0 var(--label-width);
+      min-width: 0;
+      padding-right: 9px;
+      overflow: hidden;
+      color: var(--text-muted);
+      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+      line-height: var(--bar-height);
+      text-align: right;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .row-bar-track {
+      position: relative;
+      flex: 1 1 auto;
+      min-width: 0;
+      height: var(--bar-height);
+      border-left: 1px solid var(--border);
+    }
+
+    .row-bar {
+      position: absolute;
+      top: 2px;
+      height: calc(100% - 4px);
+      min-width: 4px;
+      padding: 0 7px;
+      overflow: hidden;
+      color: #ffffff;
+      background: var(--status-color);
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 650;
+      line-height: calc(var(--bar-height) - 4px);
+      text-overflow: clip;
+      white-space: nowrap;
+    }
+
+    #detail-dialog {
+      width: min(480px, 100vw);
+      height: 100dvh;
+      max-height: none;
+      margin: 0 0 0 auto;
+      padding: 0;
+      color: var(--text);
+      background: var(--surface);
+      border: 0;
+      border-left: 1px solid var(--border);
+    }
+
+    #detail-dialog[open] { display: flex; flex-direction: column; }
+    #detail-dialog::backdrop { background: rgb(29 36 32 / 0.36); }
+
+    #detail-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    #detail-title {
+      min-width: 0;
+      margin: 0;
+      overflow-wrap: anywhere;
+      font-size: 14px;
+    }
+
+    #detail-close {
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      color: var(--text-muted);
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    #detail-close:hover {
+      color: var(--text);
+      background: var(--surface-muted);
+      border-color: var(--border);
+    }
+
+    #detail-body {
+      flex: 1 1 auto;
+      min-height: 0;
+      padding: 16px;
+      overflow-y: auto;
+    }
+
+    .detail-field { margin-bottom: 16px; }
+
+    .field-label {
+      margin-bottom: 5px;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .field-value { overflow-wrap: anywhere; font-size: 13px; }
+
+    .json-block {
+      max-height: 360px;
+      margin: 0;
+      padding: 11px;
+      overflow: auto;
+      color: var(--text);
+      background: #f7f9f7;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .status-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .status-tag::before {
+      width: 9px;
+      height: 9px;
+      background: var(--status-color);
+      border-radius: 2px;
+      content: "";
+    }
+
+    #tooltip {
+      position: fixed;
+      z-index: 20;
+      display: none;
+      max-width: min(320px, calc(100vw - 24px));
+      padding: 7px 9px;
+      pointer-events: none;
+      color: #ffffff;
+      background: #242a27;
+      border: 1px solid #47504a;
+      border-radius: 4px;
+      font-size: 11px;
+      line-height: 1.45;
+      white-space: pre-line;
+    }
+
+    @media (max-width: 900px) {
+      :root { --label-width: 104px; }
+
+      #app { height: auto; }
+      #main { flex-direction: column; overflow: visible; }
+
+      #input-panel {
+        flex: none;
+        width: 100%;
+        min-width: 0;
+        min-height: 430px;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      #trace-form { min-height: 370px; }
+      #results-panel { min-height: 520px; overflow: visible; }
+      #timeline { min-height: 330px; }
+
+      #stats-bar { grid-template-columns: repeat(4, minmax(70px, 1fr)); }
+      #stats-bar > div:nth-child(n + 5) { border-top: 1px solid var(--border); }
+      #stats-bar > div:last-child { grid-column: span 2; }
+    }
+
+    @media (max-width: 520px) {
+      :root { --label-width: 92px; }
+
+      #header { align-items: flex-start; padding: 9px 12px; }
+      .brand { align-items: flex-start; flex-direction: column; gap: 1px; }
+      #header h1 { font-size: 16px; }
+
+      #trace-form { padding-inline: 12px; }
+      #stats-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      #stats-bar > div:nth-child(n + 4) { border-top: 1px solid var(--border); }
+      #stats-bar > div:last-child { grid-column: 1 / -1; }
+      #insights-bar { align-items: flex-start; flex-direction: column; gap: 3px; }
+      #legend { gap: 10px; padding-inline: 12px; }
+      #time-axis { padding-left: calc(var(--label-width) + 12px); padding-right: 12px; }
+      #timeline { padding-inline: 12px; }
+      .row-label { font-size: 10px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header id="header">
+      <div class="brand">
+        <span class="brand-owner">Tinkora</span>
+        <h1>Tool Call Trace</h1>
+      </div>
+      <span class="runtime-status">Local WASM</span>
+    </header>
+
+    <main id="main">
+      <aside id="input-panel" aria-labelledby="input-heading">
+        <div class="panel-heading">
+          <h2 id="input-heading">Trace input</h2>
+        </div>
+        <form id="trace-form">
+          <span class="control-label" id="format-label">Format</span>
+          <div id="format-selector" role="group" aria-labelledby="format-label">
+            <button type="button" data-format="generic" aria-pressed="true">Generic JSON</button>
+            <button type="button" data-format="openai" aria-pressed="false">OpenAI run steps</button>
+          </div>
+
+          <label class="control-label" for="json-input">Tool-call log (JSON)</label>
+          <textarea id="json-input" aria-describedby="error-message" spellcheck="false" placeholder="JSON tool-call log"></textarea>
+          <button id="analyze-button" type="submit">Analyze trace</button>
+          <p id="error-message" role="alert" aria-live="assertive"></p>
+        </form>
+      </aside>
+
+      <section id="results-panel" aria-label="Trace results">
+        <dl id="stats-bar" aria-live="polite">
+          <div><dd id="stat-calls">-</dd><dt>Calls</dt></div>
+          <div><dd id="stat-total-time">-</dd><dt>Total (ms)</dt></div>
+          <div><dd id="stat-avg">-</dd><dt>Average (ms)</dt></div>
+          <div><dd id="stat-slowest">-</dd><dt>Slowest (ms)</dt></div>
+          <div><dd id="stat-errors">-</dd><dt>Errors</dt></div>
+          <div><dd id="stat-error-rate">-</dd><dt>Error rate</dt></div>
+          <div><dd id="stat-most">-</dd><dt>Most used</dt></div>
+        </dl>
+
+        <div id="insights-bar" aria-live="polite">
+          <span id="duplicate-insight"></span>
+          <span id="slow-insight"></span>
+        </div>
+
+        <div id="legend" aria-label="Call status legend">
+          <span><span class="legend-marker success" aria-hidden="true"></span>Success</span>
+          <span><span class="legend-marker error" aria-hidden="true"></span>Error</span>
+          <span><span class="legend-marker pending" aria-hidden="true"></span>Pending</span>
+          <span><span class="legend-marker cancelled" aria-hidden="true"></span>Cancelled</span>
+        </div>
+        <div id="time-axis" aria-hidden="true"></div>
+        <div id="timeline" aria-label="Tool-call timeline">
+          <div id="empty-state">No trace analyzed</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="detail-dialog" aria-labelledby="detail-title">
+    <div id="detail-header">
+      <h2 id="detail-title">Call details</h2>
+      <button id="detail-close" type="button" aria-label="Close call details">&times;</button>
+    </div>
+    <div id="detail-body"></div>
+  </dialog>
+
+  <div id="tooltip" role="tooltip"></div>
+
+  <script type="module">
+    import init, {
+      wasm_analyze,
+      wasm_parse_generic_array,
+      wasm_parse_openai_format,
+    } from "./pkg/tool_call_trace_web.js";
+
+    let currentLog = null;
+    let currentAnalysis = null;
+    let selectedFormat = "generic";
+    let detailTrigger = null;
+    let resizeFrame = null;
+
+    const input = document.getElementById("json-input");
+    const analyzeButton = document.getElementById("analyze-button");
+    const errorMessage = document.getElementById("error-message");
+    const timeline = document.getElementById("timeline");
+    const timeAxis = document.getElementById("time-axis");
+    const insightsBar = document.getElementById("insights-bar");
+    const duplicateInsight = document.getElementById("duplicate-insight");
+    const slowInsight = document.getElementById("slow-insight");
+    const detailDialog = document.getElementById("detail-dialog");
+    const detailBody = document.getElementById("detail-body");
+    const detailTitle = document.getElementById("detail-title");
+    const detailClose = document.getElementById("detail-close");
+    const tooltip = document.getElementById("tooltip");
+
+    const samples = {
+      generic: JSON.stringify([
+        { id: "call_01", name: "search", input: { query: "Rust WASM tutorial" }, output: { results: ["doc-a", "doc-b"] }, start_time_ms: 1000, end_time_ms: 1120, status: "success" },
+        { id: "call_02", name: "read_file", input: { path: "/src/main.rs" }, output: { lines: 42 }, start_time_ms: 1050, end_time_ms: 1095, status: "success" },
+        { id: "call_03", name: "search", input: { query: "wasm-bindgen docs" }, output: { results: ["doc-c"] }, start_time_ms: 1120, end_time_ms: 1280, status: "success" },
+        { id: "call_04", name: "grep", input: { pattern: "TODO", path: "src/" }, output: { matches: 3 }, start_time_ms: 1130, end_time_ms: 1210, status: "success" },
+        { id: "call_05", name: "write_file", input: { path: "/out.txt", content: "hello" }, output: { bytes_written: 5 }, start_time_ms: 1280, end_time_ms: 1310, status: "success" },
+        { id: "call_06", name: "web_fetch", input: { url: "https://example.com/api" }, output: null, error: "Connection timeout", start_time_ms: 1310, end_time_ms: 4310, status: "error" },
+        { id: "call_07", name: "web_fetch", input: { url: "https://example.com/api" }, output: { status: 200 }, start_time_ms: 4310, end_time_ms: 5510, status: "success" },
+        { id: "call_08", name: "search", input: { query: "Rust WASM tutorial" }, output: { results: ["doc-a"] }, start_time_ms: 5510, end_time_ms: 5630, status: "success" },
+        { id: "call_09", name: "parse_json", input: { json: "{\"key\":\"value\"}" }, start_time_ms: 5650, end_time_ms: 5650, status: "pending" },
+      ], null, 2),
+      openai: JSON.stringify({
+        object: "list",
+        data: [
+          { id: "step_1", step_details: { type: "tool_calls", tool_calls: [{ id: "call_search", type: "function", function: { name: "search", arguments: "{\"query\":\"hello\"}", output: "{\"matches\":3}" } }] }, created_at: 1715000000, completed_at: 1715000015, status: "completed" },
+          { id: "step_2", step_details: { type: "tool_calls", tool_calls: [{ id: "call_read", type: "function", function: { name: "read_file", arguments: "{\"path\":\"/etc/hosts\"}" } }] }, created_at: 1715000015, completed_at: 1715000025, status: "completed" },
+          { id: "step_3", step_details: { type: "tool_calls", tool_calls: [{ id: "call_fetch", type: "function", function: { name: "web_fetch", arguments: "{\"url\":\"https://api.example.com\"}" } }] }, created_at: 1715000025, failed_at: 1715000030, status: "failed" },
+        ],
+      }, null, 2),
+    };
+
+    document.getElementById("format-selector").addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-format]");
+      if (!button) return;
+
+      selectedFormat = button.dataset.format;
+      document.querySelectorAll("#format-selector button").forEach((candidate) => {
+        candidate.setAttribute("aria-pressed", String(candidate === button));
+      });
+      input.value = samples[selectedFormat];
+      showError(null);
+    });
+
+    document.getElementById("trace-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      analyzeTrace();
+    });
+
+    function analyzeTrace() {
+      const json = input.value.trim();
+      if (!json) {
+        showError("Enter a JSON tool-call log.");
+        input.focus();
+        return;
+      }
+
+      showError(null);
+      analyzeButton.disabled = true;
+      analyzeButton.textContent = "Analyzing...";
+
+      try {
+        currentLog = selectedFormat === "openai"
+          ? wasm_parse_openai_format(json)
+          : wasm_parse_generic_array(json);
+        currentAnalysis = wasm_analyze(JSON.stringify(currentLog), 5_000);
+        renderTimeline();
+        renderStats();
+      } catch (error) {
+        currentLog = null;
+        currentAnalysis = null;
+        renderEmptyState();
+        clearStats();
+        showError(`Unable to analyze trace: ${error.message || error}`);
+      } finally {
+        analyzeButton.disabled = false;
+        analyzeButton.textContent = "Analyze trace";
+      }
+    }
+
+    function showError(message) {
+      errorMessage.textContent = message || "";
+      errorMessage.classList.toggle("visible", Boolean(message));
+    }
+
+    function renderEmptyState() {
+      const emptyState = document.createElement("div");
+      emptyState.id = "empty-state";
+      emptyState.textContent = "No trace analyzed";
+      timeline.replaceChildren(emptyState);
+      timeAxis.replaceChildren();
+      insightsBar.classList.remove("visible");
+    }
+
+    function renderTimeline() {
+      if (!currentLog?.calls?.length) {
+        renderEmptyState();
+        return;
+      }
+
+      const totalTime = currentLog.total_time_ms || 1;
+      renderTimeAxis(totalTime);
+      const rows = document.createDocumentFragment();
+
+      for (const call of currentLog.calls) {
+        const rawLeft = totalTime > 0 ? (call.start_time_ms / totalTime) * 100 : 0;
+        const leftPercent = Math.min(Math.max(rawLeft, 0), 99.5);
+        const rawWidth = totalTime > 0 ? (call.duration_ms / totalTime) * 100 : 1;
+        const widthPercent = Math.max(Math.min(rawWidth, 100 - leftPercent), 0.5);
+        const status = ["success", "error", "pending", "cancelled"].includes(call.status)
+          ? call.status
+          : "pending";
+
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "trace-row";
+        row.dataset.callId = call.id;
+        row.setAttribute(
+          "aria-label",
+          `${call.name}, ${status}, starts at ${call.start_time_ms} milliseconds, duration ${call.duration_ms} milliseconds`,
+        );
+
+        const label = document.createElement("span");
+        label.className = "row-label";
+        label.title = call.name;
+        label.textContent = call.name;
+
+        const track = document.createElement("span");
+        track.className = "row-bar-track";
+        track.setAttribute("aria-hidden", "true");
+
+        const bar = document.createElement("span");
+        bar.className = `row-bar ${status}`;
+        bar.style.left = `${leftPercent}%`;
+        bar.style.width = `${widthPercent}%`;
+        if (widthPercent >= 7 && call.duration_ms > 0) {
+          bar.textContent = `${call.duration_ms}ms`;
+        }
+
+        track.append(bar);
+        row.append(label, track);
+        row.addEventListener("click", () => openDetail(call, row));
+        row.addEventListener("mouseenter", (event) => showTooltip(event, call));
+        row.addEventListener("mousemove", positionTooltip);
+        row.addEventListener("mouseleave", hideTooltip);
+        rows.append(row);
+      }
+
+      timeline.replaceChildren(rows);
+    }
+
+    function renderTimeAxis(totalTime) {
+      const usableWidth = Math.max(timeAxis.clientWidth - 140, 160);
+      const widthLimitedIntervals = usableWidth < 300 ? 2 : usableWidth < 600 ? 4 : 6;
+      const durationLimitedIntervals = Math.max(2, Math.ceil(totalTime / 500));
+      const intervals = Math.min(widthLimitedIntervals, durationLimitedIntervals);
+      const ticks = document.createDocumentFragment();
+
+      for (let index = 0; index <= intervals; index += 1) {
+        const tick = document.createElement("span");
+        tick.textContent = `${Math.round((totalTime / intervals) * index)}ms`;
+        ticks.append(tick);
+      }
+      timeAxis.replaceChildren(ticks);
+    }
+
+    function renderStats() {
+      const log = currentLog;
+      const stats = currentAnalysis.stats;
+      document.getElementById("stat-calls").textContent = log.total_calls;
+      document.getElementById("stat-total-time").textContent = log.total_time_ms;
+      document.getElementById("stat-avg").textContent = Math.round(stats.avg_duration_ms);
+      document.getElementById("stat-slowest").textContent = stats.max_duration_ms;
+      document.getElementById("stat-errors").textContent = log.error_count;
+      document.getElementById("stat-error-rate").textContent = `${Math.round(stats.error_rate * 100)}%`;
+      document.getElementById("stat-most").textContent = stats.most_called_tool || "-";
+
+      const duplicateCount = currentAnalysis.duplicate_calls.reduce(
+        (total, [, count]) => total + count - 1,
+        0,
+      );
+      const slowCount = currentAnalysis.slow_calls.length;
+      duplicateInsight.textContent = duplicateCount > 0
+        ? `${duplicateCount} repeated call${duplicateCount === 1 ? "" : "s"}`
+        : "No repeated calls";
+      slowInsight.textContent = slowCount > 0
+        ? `${slowCount} call${slowCount === 1 ? "" : "s"} over 5,000ms`
+        : "No calls over 5,000ms";
+      insightsBar.classList.add("visible");
+    }
+
+    function clearStats() {
+      [
+        "stat-calls",
+        "stat-total-time",
+        "stat-avg",
+        "stat-slowest",
+        "stat-errors",
+        "stat-error-rate",
+        "stat-most",
+      ].forEach((id) => {
+        document.getElementById(id).textContent = "-";
+      });
+    }
+
+    function appendDetailField(labelText, value, options = {}) {
+      const field = document.createElement("section");
+      field.className = "detail-field";
+
+      const label = document.createElement("div");
+      label.className = "field-label";
+      label.textContent = labelText;
+
+      let content;
+      if (options.json) {
+        content = document.createElement("pre");
+        content.className = "json-block";
+        try {
+          content.textContent = value == null
+            ? "null"
+            : typeof value === "string"
+              ? value
+              : JSON.stringify(value, null, 2);
+        } catch {
+          content.textContent = String(value);
+        }
+      } else {
+        content = document.createElement("div");
+        content.className = options.status ? `status-tag ${options.status}` : "field-value";
+        content.textContent = String(value);
+        if (options.error) content.style.color = "var(--error)";
+      }
+
+      field.append(label, content);
+      detailBody.append(field);
+    }
+
+    function openDetail(call, trigger) {
+      detailTrigger = trigger;
+      detailTitle.textContent = `Call details: ${call.name}`;
+      detailBody.replaceChildren();
+      appendDetailField("Call ID", call.id);
+      appendDetailField("Tool", call.name);
+      appendDetailField("Status", call.status, { status: call.status });
+      appendDetailField(
+        "Timing",
+        `Start ${call.start_time_ms}ms | End ${call.end_time_ms}ms | Duration ${call.duration_ms}ms`,
+      );
+      if (call.error) appendDetailField("Error", call.error, { error: true });
+      appendDetailField("Input", call.input, { json: true });
+      appendDetailField("Output", call.output, { json: true });
+      detailDialog.showModal();
+      detailClose.focus();
+    }
+
+    function closeDetail() {
+      if (!detailDialog.open) return;
+      detailDialog.close();
+      detailTrigger?.focus();
+      detailTrigger = null;
+    }
+
+    detailClose.addEventListener("click", closeDetail);
+    detailDialog.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      closeDetail();
+    });
+
+    function showTooltip(event, call) {
+      tooltip.textContent = `${call.name}\n${call.status} | start ${call.start_time_ms}ms | duration ${call.duration_ms}ms${call.error ? `\n${call.error}` : ""}`;
+      tooltip.style.display = "block";
+      positionTooltip(event);
+    }
+
+    function positionTooltip(event) {
+      const left = Math.min(event.clientX + 12, window.innerWidth - tooltip.offsetWidth - 12);
+      const top = Math.min(event.clientY + 12, window.innerHeight - tooltip.offsetHeight - 12);
+      tooltip.style.left = `${Math.max(left, 12)}px`;
+      tooltip.style.top = `${Math.max(top, 12)}px`;
+    }
+
+    function hideTooltip() {
+      tooltip.style.display = "none";
+    }
+
+    window.addEventListener("resize", () => {
+      if (!currentLog) return;
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(renderTimeline);
+    });
+
+    await init();
+    input.value = samples.generic;
+  </script>
+</body>
+</html>

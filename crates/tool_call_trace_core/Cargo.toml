@@ -1,0 +1,14 @@
+[package]
+name = "tool_call_trace_core"
+version = "0.1.0"
+description = "Strict parsing and analysis for timestamped AI agent tool-call traces"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

@@ -1,0 +1,8 @@
+# Default ownership
+* @tinkeragora
+
+# Security and automation boundaries
+/.github/ @tinkeragora
+/crates/tool_call_trace_core/ @tinkeragora
+/crates/tool_call_trace_web/src/ @tinkeragora
+/SECURITY.md @tinkeragora

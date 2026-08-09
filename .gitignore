@@ -1,0 +1,9 @@
+/target
+/pkg
+/dist
+**/pkg/.gitignore
+.playwright-cli/
+crates/tool_call_trace_web/node_modules/
+crates/tool_call_trace_web/playwright-report/
+crates/tool_call_trace_web/test-results/
+crates/tool_call_trace_web/static/pkg/

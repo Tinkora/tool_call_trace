@@ -1,0 +1,25 @@
+name: Quality
+
+'on':
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    uses: Tinkora/.github/.github/workflows/reusable-rust-quality.yml@e967aed0860957b24daf57e66766713c60b5bcae # Tinkora organization baseline
+    with:
+      working-directory: .
+      toolchain: 1.95.0
+      locked: true
+      msrv: 1.95.0
+
+  wasm:
+    uses: Tinkora/.github/.github/workflows/reusable-wasm-quality.yml@e967aed0860957b24daf57e66766713c60b5bcae # Tinkora organization baseline
+    with:
+      working-directory: crates/tool_call_trace_web
+      toolchain: 1.95.0
+      locked: true
+      playwright-smoke: true
+      node-version: '24'
