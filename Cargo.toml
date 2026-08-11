@@ -1,5 +1,9 @@
 [workspace]
-members = ["crates/tool_call_trace_core", "crates/tool_call_trace_web"]
+members = [
+    "crates/tool_call_trace_cli",
+    "crates/tool_call_trace_core",
+    "crates/tool_call_trace_web",
+]
 resolver = "3"
 
 [workspace.package]

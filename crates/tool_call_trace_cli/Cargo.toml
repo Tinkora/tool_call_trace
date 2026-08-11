@@ -1,0 +1,18 @@
+[package]
+name = "tool_call_trace_cli"
+version.workspace = true
+description = "Local contract checker for timestamped AI agent tool-call traces"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "tool-call-trace"
+path = "src/main.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+tool_call_trace_core = { path = "../tool_call_trace_core" }
