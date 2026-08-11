@@ -1,0 +1,23 @@
+[
+  {
+    "name": "running tool",
+    "context": {
+      "trace_id": "8f2efebf74bd4eaf8c7fc21969941901",
+      "span_id": "a806adc10f142101",
+      "is_remote": false
+    },
+    "parent": null,
+    "start_time": "2026-08-11T09:00:01.000Z",
+    "end_time": "2026-08-11T09:00:01.040Z",
+    "attributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "add_numbers",
+      "gen_ai.tool.call.id": "pyd_ai_call_01",
+      "gen_ai.tool.call.arguments": "{\"x\":42,\"y\":42}",
+      "gen_ai.tool.call.result": "84",
+      "logfire.msg": "running tool: add_numbers",
+      "logfire.span_type": "span"
+    },
+    "status": { "status_code": "UNSET" }
+  }
+]

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 pub const MAX_INPUT_BYTES: usize = 5 * 1024 * 1024;
+pub const MAX_INPUT_LINES: usize = 100_000;
 pub const MAX_TOOL_CALLS: usize = 2_000;
 
 /// The status of an individual tool call.
@@ -58,23 +59,29 @@ pub struct ToolCallLog {
     pub error_count: u32,
 }
 
-fn normalize_timestamps(calls: &mut [ToolCall], trace_start_ms: u64) {
+pub(crate) fn normalize_timestamps(calls: &mut [ToolCall], trace_start_ms: u64) {
     for call in calls {
         call.start_time_ms = call.start_time_ms.saturating_sub(trace_start_ms);
         call.end_time_ms = call.end_time_ms.saturating_sub(trace_start_ms);
     }
 }
 
-fn validate_input_size(json: &str) -> Result<(), CoreError> {
+pub(crate) fn validate_input_size(json: &str) -> Result<(), CoreError> {
     if json.len() > MAX_INPUT_BYTES {
         return Err(CoreError::InvalidFormat(format!(
             "input exceeds the {MAX_INPUT_BYTES}-byte limit"
         )));
     }
+    let line_count = json.bytes().filter(|byte| *byte == b'\n').count() + 1;
+    if line_count > MAX_INPUT_LINES {
+        return Err(CoreError::InvalidFormat(format!(
+            "input exceeds the {MAX_INPUT_LINES}-line limit"
+        )));
+    }
     Ok(())
 }
 
-fn validate_call_count(count: usize) -> Result<(), CoreError> {
+pub(crate) fn validate_call_count(count: usize) -> Result<(), CoreError> {
     if count > MAX_TOOL_CALLS {
         return Err(CoreError::InvalidFormat(format!(
             "tool-call count exceeds the {MAX_TOOL_CALLS}-call limit"

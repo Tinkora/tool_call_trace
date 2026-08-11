@@ -1,5 +1,6 @@
 use crate::analyze::full_analyze;
 use crate::error::CoreError;
+use crate::import::parse_agent_trace;
 use crate::parse::{self, ToolCallLog};
 
 /// Parse a tool-call log in OpenAI run-steps format.
@@ -29,10 +30,7 @@ pub fn analyze_json(log_json: &str, slow_threshold_ms: Option<u64>) -> Result<St
 /// Auto-detect the format of a tool-call log and parse it.
 /// Tries OpenAI, then Generic Array format.
 pub fn auto_parse_json(json: &str) -> Result<String, CoreError> {
-    if let Ok(log) = parse::parse_openai_format(json) {
-        return serde_json::to_string(&log).map_err(|e| CoreError::ParseError(e.to_string()));
-    }
-    let log = parse::parse_generic_array(json)?;
+    let log = parse_agent_trace(json)?;
     serde_json::to_string(&log).map_err(|e| CoreError::ParseError(e.to_string()))
 }
 
