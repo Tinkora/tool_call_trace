@@ -1,0 +1,286 @@
+name: Release
+
+'on':
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.repository }}-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.ref_name }}
+
+jobs:
+  preflight:
+    name: Reject an existing release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Verify release does not exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          status="$(curl --proto '=https' --tlsv1.2 --silent --show-error \
+            --output /dev/null --write-out '%{http_code}' \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}")"
+          case "$status" in
+            404) ;;
+            200) echo "Release ${RELEASE_TAG} already exists; assets are immutable." >&2; exit 1 ;;
+            *) echo "Release lookup returned HTTP ${status}." >&2; exit 1 ;;
+          esac
+
+  validate:
+    name: Validate version metadata
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Check out tagged commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.95.0 --profile minimal --no-self-update
+
+      - name: Validate tag, packages, and changelog
+        id: release
+        env:
+          NOTES_PATH: ${{ runner.temp }}/release-notes.md
+          RUSTUP_TOOLCHAIN: 1.95.0
+        run: |
+          set -euo pipefail
+          ruby scripts/validate_release.rb --tag "$RELEASE_TAG" --notes "$NOTES_PATH"
+          tag_commit="$(git rev-parse --verify "refs/tags/${RELEASE_TAG}^{commit}")"
+          [[ "$tag_commit" == "$GITHUB_SHA" ]] || { echo "tag does not identify the workflow commit" >&2; exit 1; }
+          echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload validated release notes
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-notes-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-notes.md
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 7
+
+  quality:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/quality.yml
+
+  documentation:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/docs-quality.yml
+
+  supply-chain:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/supply-chain.yml
+
+  build:
+    name: Build release archive
+    needs: [validate, quality, documentation, supply-chain]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Check out tagged commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download verified WASM package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wasm-package-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/wasm-package
+
+      - name: Assemble static application
+        run: |
+          set -euo pipefail
+          ruby scripts/test_assemble_pages.rb
+          ruby scripts/assemble_pages.rb --wasm-package "$RUNNER_TEMP/wasm-package"
+
+      - name: Package deterministic release archive
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          package="tool_call_trace-web-v${VERSION}"
+          [[ -d dist && -f dist/index.html && -f dist/pkg/tool_call_trace_web.js ]]
+          [[ -f dist/pkg/tool_call_trace_web_bg.wasm ]]
+          if find dist -type l -print -quit | grep -q .; then
+            echo "Release input contains a symbolic link" >&2
+            exit 1
+          fi
+          mkdir -p "staging/${package}" release-source
+          cp -R dist/. "staging/${package}/"
+          cp LICENSE README.md README.zh-CN.md CHANGELOG.md "staging/${package}/"
+          epoch="$(git show -s --format=%ct "$GITHUB_SHA")"
+          find staging -exec touch -h -d "@${epoch}" {} +
+          TZ=UTC tar --sort=name --mtime="@${epoch}" --owner=0 --group=0 --numeric-owner \
+            -czf "release-source/${package}.tar.gz" -C staging "$package"
+          jq -n --arg commit "$GITHUB_SHA" --arg version "$VERSION" \
+            '{commit: $commit, version: $version}' > release-source/release-metadata.json
+
+      - name: Upload release source
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-source-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-source
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 7
+
+  evidence:
+    name: Generate checksums, SBOM, and license evidence
+    needs: [validate, build, preflight]
+    permissions:
+      contents: read
+    uses: Tinkora/.github/.github/workflows/reusable-release.yml@e967aed0860957b24daf57e66766713c60b5bcae # Tinkora organization baseline
+    with:
+      source-artifact-name: release-source-${{ github.run_id }}-${{ github.run_attempt }}
+      version: ${{ needs.validate.outputs.version }}
+      publish: false
+
+  attest:
+    name: Attest release archive
+    needs: [validate, evidence]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - name: Download release candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.evidence.outputs.candidate-artifact-name }}
+          path: release-candidate
+
+      - name: Verify candidate checksums
+        run: cd release-candidate && sha256sum --check --strict SHA256SUMS
+
+      - name: Attest build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: release-candidate/tool_call_trace-web-v${{ needs.validate.outputs.version }}.tar.gz
+
+      - name: Attest SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: release-candidate/tool_call_trace-web-v${{ needs.validate.outputs.version }}.tar.gz
+          sbom-path: release-candidate/SBOM.spdx.json
+
+  verify:
+    name: Verify release candidate
+    needs: [validate, evidence, attest]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Download release candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.evidence.outputs.candidate-artifact-name }}
+          path: release-candidate
+
+      - name: Verify paths and checksums
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          candidate="release-candidate"
+          if find "$candidate" -type l -print -quit | grep -q .; then
+            echo "Release candidate contains a symbolic link" >&2
+            exit 1
+          fi
+          if find "$candidate" ! -type f ! -type d -print -quit | grep -q .; then
+            echo "Release candidate contains a special file" >&2
+            exit 1
+          fi
+          expected=("tool_call_trace-web-v${VERSION}.tar.gz" SHA256SUMS SBOM.spdx.json LICENSES.json)
+          for name in "${expected[@]}"; do
+            [[ -f "$candidate/$name" ]] || { echo "Missing release asset: $name" >&2; exit 1; }
+          done
+          [[ "$(find "$candidate" -maxdepth 1 -type f | wc -l | tr -d ' ')" == "4" ]] || {
+            echo "Unexpected top-level release asset" >&2
+            exit 1
+          }
+          (cd "$candidate" && sha256sum --check --strict SHA256SUMS)
+
+  release:
+    name: Publish GitHub Release
+    needs: [validate, evidence, verify]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Download verified release candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.evidence.outputs.candidate-artifact-name }}
+          path: release-candidate
+
+      - name: Download validated release notes
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-notes-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-notes
+
+      - name: Reverify and publish immutable assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          (cd release-candidate && sha256sum --check --strict SHA256SUMS)
+          mapfile -d '' assets < <(find release-candidate -maxdepth 1 -type f -print0 | LC_ALL=C sort -z)
+          [[ "${#assets[@]}" == "4" ]] || { echo "Unexpected release asset count" >&2; exit 1; }
+          release_id="$(gh api \
+            --method POST \
+            "repos/${GH_REPO}/releases" \
+            -f tag_name="$TAG" \
+            -f target_commitish="$GITHUB_SHA" \
+            -f name="$TAG" \
+            -f body="$(cat release-notes/release-notes.md)" \
+            -F draft=true \
+            -F prerelease=false \
+            --jq '.id')"
+          release_json="$(gh api "repos/${GH_REPO}/releases/${release_id}")"
+          test "$(jq -r '.tag_name' <<< "$release_json")" = "$TAG"
+          test "$(jq -r '.draft' <<< "$release_json")" = true
+          gh release upload "$TAG" "${assets[@]}"
+          gh api \
+            --method PATCH \
+            "repos/${GH_REPO}/releases/${release_id}" \
+            -F draft=false \
+            --jq '.draft' | grep -qx false

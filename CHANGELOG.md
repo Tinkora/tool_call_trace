@@ -6,6 +6,10 @@ All notable changes will be documented in this file. The format follows
 
 ## [Unreleased]
 
+No unreleased changes.
+
+## [0.1.0] - 2026-08-11
+
 ### Added
 
 - Strict Generic JSON and timestamped OpenAI run-step parsing.
@@ -26,3 +30,6 @@ All notable changes will be documented in this file. The format follows
 
 - Removed fabricated Anthropic timing support and unimplemented MCP tool
   declarations.
+
+[Unreleased]: https://github.com/Tinkora/tool_call_trace/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Tinkora/tool_call_trace/releases/tag/v0.1.0
