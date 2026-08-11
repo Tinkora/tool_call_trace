@@ -2,13 +2,13 @@
   {
     "name": "running tool",
     "context": {
-      "trace_id": "8f2efebf74bd4eaf8c7fc21969941901",
-      "span_id": "a806adc10f142101",
+      "trace_id": 1,
+      "span_id": 5,
       "is_remote": false
     },
     "parent": null,
-    "start_time": "2026-08-11T09:00:01.000Z",
-    "end_time": "2026-08-11T09:00:01.040Z",
+    "start_time": 4000000000,
+    "end_time": 4040000000,
     "attributes": {
       "gen_ai.operation.name": "execute_tool",
       "gen_ai.tool.name": "add_numbers",

@@ -36,12 +36,73 @@ fn langchain_fixture_preserves_structured_tool_input() {
 fn pydantic_ai_fixture_parses_logfire_tool_attributes() {
     let log = parse_pydantic_ai_logfire_format(PYDANTIC_AI).unwrap();
 
-    assert_eq!(log.trace_id, "8f2efebf74bd4eaf8c7fc21969941901");
+    assert_eq!(log.trace_id, "1");
     assert_eq!(log.total_time_ms, 40);
     assert_eq!(log.calls[0].id, "pyd_ai_call_01");
     assert_eq!(log.calls[0].name, "add_numbers");
     assert_eq!(log.calls[0].input["x"], 42);
     assert_eq!(log.calls[0].output.as_ref().unwrap(), 84);
+}
+
+#[test]
+fn openai_agents_and_langchain_unfinished_calls_remain_pending() {
+    let openai = r#"{
+      "data": [{
+        "object": "trace.span",
+        "id": "span_pending",
+        "trace_id": "trace_pending",
+        "started_at": "2026-08-11T09:00:00Z",
+        "ended_at": null,
+        "span_data": {"type":"function","name":"wait","input":"{}","output":null},
+        "error": null
+      }]
+    }"#;
+    let langchain = r#"{
+      "id":"run_pending",
+      "name":"wait",
+      "start_time":"2026-08-11T09:00:00Z",
+      "end_time":null,
+      "inputs":{},
+      "outputs":null,
+      "error":null,
+      "run_type":"tool",
+      "trace_id":"trace_pending",
+      "child_runs":[]
+    }"#;
+
+    for log in [
+        parse_openai_agents_format(openai).unwrap(),
+        parse_langchain_format(langchain).unwrap(),
+    ] {
+        assert_eq!(log.calls[0].status, CallStatus::Pending);
+        assert_eq!(log.calls[0].duration_ms, 0);
+    }
+}
+
+#[test]
+fn pydantic_ai_legacy_attributes_and_exception_events_map_to_error() {
+    let input = r#"[{
+      "name":"running tool",
+      "context":{"trace_id":1,"span_id":9,"is_remote":false},
+      "parent":null,
+      "start_time":4000000000,
+      "end_time":4050000000,
+      "attributes":{
+        "gen_ai.operation.name":"execute_tool",
+        "gen_ai.tool.name":"legacy_tool",
+        "gen_ai.tool.call.id":"pyd_ai_legacy",
+        "tool_arguments":{"x":1},
+        "tool_response":{"message":"failed"},
+        "logfire.level_num":17
+      },
+      "events":[{"name":"exception","timestamp":4040000000,"attributes":{"exception.message":"failed"}}]
+    }]"#;
+
+    let log = parse_pydantic_ai_logfire_format(input).unwrap();
+    assert_eq!(log.calls[0].input["x"], 1);
+    assert_eq!(log.calls[0].output.as_ref().unwrap()["message"], "failed");
+    assert_eq!(log.calls[0].status, CallStatus::Error);
+    assert_eq!(log.calls[0].error.as_deref(), Some("failed"));
 }
 
 #[test]

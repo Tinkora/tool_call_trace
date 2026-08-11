@@ -14,6 +14,9 @@ personal data.
   and
   [`src/agents/tracing/span_data.py`](https://github.com/openai/openai-agents-python/blob/8ecdac5947b0ed9f7c08e2b4d67a038840f5d5e8/src/agents/tracing/span_data.py#L135-L166)
 - Contract: exported `trace.span` records with `function` span data.
+- Source kind: adapted exporter payload. The official processor wraps exported
+  spans in `{"data": [...]}`; generated IDs, timestamps, and ordinary values
+  are deterministic replacements.
 - License: MIT.
 
 ## LangChain
@@ -36,5 +39,7 @@ personal data.
   [`pydantic_ai_slim/pydantic_ai/capabilities/instrumentation.py`](https://github.com/pydantic/pydantic-ai/blob/d995cfee9fa4243e3a6f5d8e6762b841f7fde839/pydantic_ai_slim/pydantic_ai/capabilities/instrumentation.py#L399-L424)
 - Contract: Logfire `exported_spans_as_dict()` records with standard
   `gen_ai.operation.name`, tool name, call ID, arguments, and result attributes.
+- Source kind: adapted exporter snapshot. OTel nanosecond timestamps and numeric
+  test context IDs match the pinned upstream snapshot; generated values are
+  deterministic replacements.
 - License: MIT.
-
