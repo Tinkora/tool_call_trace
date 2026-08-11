@@ -5,7 +5,8 @@
 Tool Call Trace is a browser-local waterfall viewer for timestamped AI Agent
 tool calls. It currently accepts strict Generic JSON arrays and OpenAI run
 steps. Do not claim Anthropic timing support, a hosted service, an MCP server,
-an executable Agent tool, automatic redaction, or a published release.
+an executable Agent tool, automatic redaction, or a package release. `v0.1.0`
+is the first GitHub Release of the static browser tool.
 
 ## Architecture
 

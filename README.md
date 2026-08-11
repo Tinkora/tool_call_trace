@@ -8,13 +8,15 @@
 
 [Open the browser preview](https://tinkora.github.io/tool_call_trace/)
 
+[Download v0.1.0 and verification assets](https://github.com/Tinkora/tool_call_trace/releases/tag/v0.1.0)
+
 A browser-local waterfall viewer for timestamped AI agent tool calls. It turns
 Generic JSON traces and OpenAI run steps into a relative timeline, exposes each
 call's input and output, and surfaces latency, errors, repeated calls, and slow
 calls without sending the trace to a server.
 
-> Status: pre-release. A public browser preview is deployed through GitHub
-> Pages; no versioned release, package, or Agent transport has been published.
+> Status: pre-release maturity. `v0.1.0` is the first versioned browser release;
+> no package or Agent transport has been published.
 
 ## Current capabilities
 
