@@ -4,12 +4,14 @@
 
 [打开浏览器预览](https://tinkora.github.io/tool_call_trace/)
 
+[下载 v0.1.0 及验证资产](https://github.com/Tinkora/tool_call_trace/releases/tag/v0.1.0)
+
 Tool Call Trace 是一个在浏览器本地运行的 AI Agent 工具调用瀑布流查看器。它把
 Generic JSON trace 和 OpenAI run steps 转换为相对时间线，并展示输入、输出、延迟、
 错误、重复调用和慢调用；trace 不会上传到服务器。
 
-> 状态：预发布。浏览器预览通过 GitHub Pages 公开部署；当前没有已发布版本、Package
-> 或 Agent transport。
+> 状态：预发布成熟度。`v0.1.0` 是首个版本化浏览器 Release；当前没有 Package 或
+> Agent transport。
 
 ## 当前能力
 

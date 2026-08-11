@@ -1,6 +1,6 @@
 [package]
 name = "tool_call_trace_web"
-version = "0.1.0"
+version.workspace = true
 description = "Browser-local WebAssembly bridge for Tool Call Trace"
 edition.workspace = true
 license.workspace = true

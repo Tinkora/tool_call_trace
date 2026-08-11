@@ -9,6 +9,7 @@ Current stage: **Pre-release**.
 - Core parsing and analysis are covered by outcome-focused Rust tests.
 - The compiled WASM boundary is exercised in Chromium.
 - The primary browser flow is verified at four viewport widths.
+- Version `v0.1.0` is the first reproducible GitHub Release of the static tool.
 - Strict formatting, Clippy, dependency policy, and vulnerability checks exist.
 - Public claims have been reduced to implemented and reproducible behavior.
 - The repository is published under `Tinkora/tool_call_trace` without inherited
