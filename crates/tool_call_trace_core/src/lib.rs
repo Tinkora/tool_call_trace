@@ -13,4 +13,7 @@ pub use import::{
 };
 pub use parse::{CallStatus, ToolCall, ToolCallLog, parse_generic_array, parse_openai_format};
 pub use redact::{RedactionConfig, RedactionOutcome, redact_log};
-pub use wasm::{analyze_json, auto_parse_json, parse_generic_array_json, parse_openai_format_json};
+pub use wasm::{
+    analyze_json, auto_parse_json, parse_generic_array_json, parse_openai_format_json,
+    redact_log_json,
+};
