@@ -31,7 +31,11 @@ changelog = File.read("CHANGELOG.md", encoding: "UTF-8")
 header = /^## \[#{Regexp.escape(version)}\] - \d{4}-\d{2}-\d{2}$/
 match = changelog.match(header)
 abort("CHANGELOG.md has no #{version} release section") unless match
-boundary = changelog.match(/^## /, match.end(0))
-notes = changelog[match.end(0)...(boundary&.begin(0) || changelog.length)].strip
+boundaries = [
+  changelog.match(/^## /, match.end(0)),
+  changelog.match(/^\[[^\]]+\]:\s+\S+$/, match.end(0))
+].compact
+boundary_offset = boundaries.map { |boundary| boundary.begin(0) }.min || changelog.length
+notes = changelog[match.end(0)...boundary_offset].strip
 abort("CHANGELOG.md #{version} section is empty") if notes.empty?
 File.write(notes_path, "#{notes}\n", encoding: "UTF-8")
