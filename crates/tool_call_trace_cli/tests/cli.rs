@@ -130,7 +130,10 @@ fn redaction_mode_hides_values_from_contract_errors() {
 
 #[test]
 fn rejects_paths_when_redaction_is_not_enabled() {
-    let output = run_cli(&["check", "--redact-path", "/input/token", "-"], "[]");
+    let output = Command::new(env!("CARGO_BIN_EXE_tool-call-trace"))
+        .args(["check", "--redact-path", "/input/token", "-"])
+        .output()
+        .unwrap();
 
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stderr).contains("--redact-path requires --redact"));
