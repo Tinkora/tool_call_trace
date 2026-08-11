@@ -1,0 +1,20 @@
+{
+  "id": "1f6a5b0d-ecfe-4f37-9f1d-a1b6c6c98901",
+  "name": "shell",
+  "parent_run_id": null,
+  "start_time": "2023-01-01T00:00:00.000000+00:00",
+  "end_time": "2023-01-01T00:00:00.090000+00:00",
+  "events": [
+    { "name": "start", "time": "2023-01-01T00:00:00.000000+00:00" },
+    { "name": "end", "time": "2023-01-01T00:00:00.090000+00:00" }
+  ],
+  "extra": {},
+  "serialized": { "name": "shell" },
+  "inputs": { "command": "printf hello", "timeout": null },
+  "outputs": { "output": "hello" },
+  "error": null,
+  "run_type": "tool",
+  "trace_id": "1f6a5b0d-ecfe-4f37-9f1d-a1b6c6c98901",
+  "dotted_order": "20230101T000000000000Z1f6a5b0d-ecfe-4f37-9f1d-a1b6c6c98901",
+  "child_runs": []
+}

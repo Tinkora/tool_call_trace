@@ -15,7 +15,7 @@ wasm-opt = false
 crate-type = ["cdylib"]
 
 [dependencies]
-tool_call_trace_core = { path = "../tool_call_trace_core", version = "0.1.0" }
+tool_call_trace_core = { path = "../tool_call_trace_core", version = "0.2.0" }
 wasm-bindgen.workspace = true
 js-sys.workspace = true
 serde.workspace = true

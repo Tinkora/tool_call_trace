@@ -6,21 +6,24 @@
 
 ## 已有证据
 
-- 核心解析和分析有面向结果的 Rust 测试。
-- 编译后的 WASM 边界已在 Chromium 中验证。
-- 浏览器主流程已覆盖四种视口宽度。
-- `v0.1.0` 是该静态工具首个可复现的 GitHub Release。
-- 已配置严格格式化、Clippy、依赖策略和漏洞检查。
-- 公开声明已经收敛为可实现、可复现的行为。
-- 仓库已在 `Tinkora/tool_call_trace` 发布，且不继承旧项目历史。
-- 已从发布提交验证 Hosted quality workflow、仓库治理、私密漏洞报告和公开 Pages 预览。
+- 核心解析、导入、脱敏和分析具有面向结果的 Rust 契约测试。
+- 编译后的 WASM 边界和浏览器流程已在四种视口宽度的 Chromium 中验证。
+- `v0.2.0` 提供可复现的静态浏览器归档，以及 checksum、SBOM、许可证证据和构建
+  attestation。
+- CLI 能从文件或 stdin 校验相同的五种 trace 契约，并为失败提供稳定的非零退出码。
+- OpenAI Agents、LangChain 和 PydanticAI fixture 引用了固定的上游契约来源与 MIT
+  许可证；它们明确属于适配样本，而不是生产 trace。
+- 显式脱敏具备对常见凭据、URL 组件、配置路径、重复处理和无 secret 失败的对抗测试。
+- 已配置严格格式化、Clippy、依赖策略、漏洞检查、文档检查和 workflow 安全检查。
+- 已启用 Hosted quality workflow、仓库治理、私密漏洞报告和公开 Pages 工具。
 
 ## 进入 Alpha 前必须完成
 
-- 记录至少一次使用真实 trace 的外部或维护者工作流。
+- 记录至少一次使用真实 trace 的外部或维护者工作流，并确认对应 exporter 契约无需针对
+  fixture 特殊修改即可工作。
 
 ## 进入 Beta 前必须完成
 
 - 与实现工作之外的用户至少完成一次反馈闭环。
 - 通过多个版本证明持续维护能力。
-- 根据真实需求决定脱敏、导出或其他带时间戳格式是否值得长期维护。
+- 在增加其他 exporter、实时采集或更广的 export surface 前，以可测量需求为依据。

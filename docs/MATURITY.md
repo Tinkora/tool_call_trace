@@ -6,25 +6,32 @@ Current stage: **Pre-release**.
 
 ## Evidence available
 
-- Core parsing and analysis are covered by outcome-focused Rust tests.
-- The compiled WASM boundary is exercised in Chromium.
-- The primary browser flow is verified at four viewport widths.
-- Version `v0.1.0` is the first reproducible GitHub Release of the static tool.
-- Strict formatting, Clippy, dependency policy, and vulnerability checks exist.
-- Public claims have been reduced to implemented and reproducible behavior.
-- The repository is published under `Tinkora/tool_call_trace` without inherited
-  project history.
+- Core parsing, import, redaction, and analysis have outcome-focused Rust
+  contract tests.
+- The compiled WASM boundary and browser workflow are exercised in Chromium at
+  four viewport widths.
+- `v0.2.0` provides a reproducible static browser archive with checksums, SBOM,
+  license evidence, and build attestations.
+- The CLI validates the same five trace contracts from files or stdin and uses
+  stable non-zero exit codes for failures.
+- OpenAI Agents, LangChain, and PydanticAI fixtures cite pinned upstream source
+  contracts and MIT licenses. They are explicitly adaptation samples, not
+  production traces.
+- Opt-in redaction has adversarial coverage for common credentials, URL
+  components, configured paths, reprocessing, and secret-free failures.
+- Strict formatting, Clippy, dependency policy, vulnerability checks,
+  documentation checks, and workflow security checks exist.
 - Hosted quality workflows, repository governance, private vulnerability
-  reporting, and the public Pages preview are verified from the published
-  commit.
+  reporting, and the public Pages tool are enabled.
 
 ## Required before Alpha
 
-- Record at least one external or maintainer workflow using a real trace.
+- Record at least one external or maintainer workflow using a real trace and
+  confirm that its exporter contract works without fixture-specific changes.
 
 ## Required before Beta
 
 - Close at least one feedback loop with a user outside the implementation work.
 - Demonstrate continued maintenance over multiple releases.
-- Decide whether redaction, export, or additional timestamped formats have enough
-  measured demand to justify their maintenance cost.
+- Use measured demand before adding another exporter, live collection, or a
+  broader export surface.

@@ -1,0 +1,23 @@
+[
+  {
+    "name": "running tool",
+    "context": {
+      "trace_id": 1,
+      "span_id": 5,
+      "is_remote": false
+    },
+    "parent": null,
+    "start_time": 4000000000,
+    "end_time": 4040000000,
+    "attributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "add_numbers",
+      "gen_ai.tool.call.id": "pyd_ai_call_01",
+      "gen_ai.tool.call.arguments": "{\"x\":42,\"y\":42}",
+      "gen_ai.tool.call.result": "84",
+      "logfire.msg": "running tool: add_numbers",
+      "logfire.span_type": "span"
+    },
+    "status": { "status_code": "UNSET" }
+  }
+]

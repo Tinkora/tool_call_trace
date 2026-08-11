@@ -8,6 +8,27 @@ All notable changes will be documented in this file. The format follows
 
 No unreleased changes.
 
+## [0.2.0] - 2026-08-11
+
+### Added
+
+- Timestamped OpenAI Agents SDK, LangChain, and PydanticAI/Logfire importers
+  with structural auto-detection and pinned upstream contract provenance.
+- A local `tool-call-trace check` CLI for files and stdin, explicit formats,
+  normalized JSON output, redaction, and stable failure codes.
+- Browser format selection and opt-in redaction with exact JSON Pointer paths,
+  replacement counts, and reparseable redacted Generic JSON.
+
+### Security
+
+- Added deterministic redaction for authorization, `X-API-Key`, token,
+  password, secret, and private-key-like fields plus sensitive HTTP(S) URL
+  components.
+- Added a 100,000-line input limit and secret-free CLI and browser failures
+  whenever redaction is requested.
+- Added adversarial Rust, WASM, CLI, and four-viewport browser coverage for
+  redaction boundaries and preserved searchable IDs.
+
 ## [0.1.0] - 2026-08-11
 
 ### Added
@@ -31,5 +52,6 @@ No unreleased changes.
 - Removed fabricated Anthropic timing support and unimplemented MCP tool
   declarations.
 
-[Unreleased]: https://github.com/Tinkora/tool_call_trace/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Tinkora/tool_call_trace/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Tinkora/tool_call_trace/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Tinkora/tool_call_trace/releases/tag/v0.1.0
