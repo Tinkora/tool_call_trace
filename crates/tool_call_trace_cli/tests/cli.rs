@@ -115,6 +115,20 @@ fn invalid_input_fails_without_echoing_the_document() {
 }
 
 #[test]
+fn redaction_mode_hides_values_from_contract_errors() {
+    let input = r#"[
+      {"id":"call_1","name":"search","input":{},"start_time_ms":0,"end_time_ms":1,"status":"STATUS_ERROR_SECRET_9x"}
+    ]"#;
+    let output = run_cli(&["check", "--format", "generic", "--redact", "-"], input);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr.contains("INVALID_FORMAT"));
+    assert!(!stderr.contains("STATUS_ERROR_SECRET_9x"));
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
 fn rejects_paths_when_redaction_is_not_enabled() {
     let output = run_cli(&["check", "--redact-path", "/input/token", "-"], "[]");
 

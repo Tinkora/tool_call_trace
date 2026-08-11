@@ -62,6 +62,16 @@ impl CliError {
         }
     }
 
+    fn redacted_contract(error: CoreError) -> Self {
+        Self {
+            message: format!(
+                "{}: input could not be parsed or redacted while redaction was enabled",
+                error.code()
+            ),
+            code: 1,
+        }
+    }
+
     fn input(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
@@ -177,7 +187,13 @@ fn parse_trace(format: TraceFormat, input: &str) -> Result<ToolCallLog, CoreErro
 
 fn execute(options: Options) -> Result<(), CliError> {
     let input = read_input(&options.input)?;
-    let log = parse_trace(options.format, &input).map_err(CliError::contract)?;
+    let log = parse_trace(options.format, &input).map_err(|error| {
+        if options.redact {
+            CliError::redacted_contract(error)
+        } else {
+            CliError::contract(error)
+        }
+    })?;
     let RedactionOutcome {
         log,
         redacted_values,

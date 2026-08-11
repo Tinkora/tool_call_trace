@@ -33,6 +33,7 @@ fn is_sensitive_key(key: &str) -> bool {
         normalized_key(key).as_str(),
         "authorization"
             | "proxyauthorization"
+            | "xapikey"
             | "apikey"
             | "accesskey"
             | "accesstoken"
