@@ -39,6 +39,47 @@ test("returns JSON-compatible values across the real WASM boundary", async ({ pa
   });
 });
 
+test("redacts normalized traces across the real WASM boundary", async ({ page }) => {
+  await page.goto("/static/");
+
+  const result = await page.evaluate(async () => {
+    const wasm = await import("/static/pkg/tool_call_trace_web.js");
+    await wasm.default();
+    const parsed = wasm.wasm_parse_generic_array(JSON.stringify([
+      {
+        id: "call_searchable_01",
+        name: "fetch",
+        input: {
+          authorization: "Bearer WASM_SECRET_9x",
+          "X-API-Key": "WASM_X_API_KEY_SECRET_9x",
+          email: "person@example.test",
+        },
+        start_time_ms: 0,
+        end_time_ms: 10,
+        status: "success",
+      },
+    ]));
+    const redacted = wasm.wasm_redact_log(JSON.stringify(parsed), JSON.stringify({
+      paths: ["/input/email"],
+    }));
+    return {
+      id: redacted.log.calls[0].id,
+      authorization: redacted.log.calls[0].input.authorization,
+      xApiKey: redacted.log.calls[0].input["X-API-Key"],
+      email: redacted.log.calls[0].input.email,
+      count: redacted.redacted_values,
+    };
+  });
+
+  expect(result).toEqual({
+    id: "call_searchable_01",
+    authorization: "[REDACTED]",
+    xApiKey: "[REDACTED]",
+    email: "[REDACTED]",
+    count: 3,
+  });
+});
+
 test("analyzes the default trace and exposes the real findings", async ({ page }) => {
   await page.goto("/static/");
   await page.getByRole("button", { name: "Analyze trace" }).click();
@@ -56,7 +97,7 @@ test("analyzes the default trace and exposes the real findings", async ({ page }
 
 test("uses OpenAI terminal timestamps and preserves function output", async ({ page }) => {
   await page.goto("/static/");
-  await page.getByRole("button", { name: "OpenAI run steps" }).click();
+  await page.getByLabel("Format").selectOption("openai");
   await page.getByRole("button", { name: "Analyze trace" }).click();
 
   await expect(page.locator("#stat-calls")).toHaveText("3");
@@ -66,6 +107,110 @@ test("uses OpenAI terminal timestamps and preserves function output", async ({ p
 
   await page.getByRole("button", { name: /^search, success,/ }).click();
   await expect(page.locator("#detail-body")).toContainText('{"matches":3}');
+});
+
+test("auto-detects a pinned Agent SDK export", async ({ page }) => {
+  await page.goto("/static/");
+  await page.getByLabel("Format").selectOption("pydantic-ai");
+  await page.getByRole("button", { name: "Analyze trace" }).click();
+
+  await expect(page.locator("#stat-calls")).toHaveText("1");
+  await expect(page.locator("#stat-total-time")).toHaveText("40");
+  await expect(page.getByRole("button", { name: /^add_numbers, success,/ })).toBeVisible();
+});
+
+test("redacts the editor, details, tooltip, and status before rendering", async ({ page }) => {
+  await page.goto("/static/");
+  await page.getByLabel("Format").selectOption("generic");
+  await page.getByRole("checkbox", { name: "Redact common secrets" }).check();
+  await page.getByLabel("Additional redaction paths").fill("/input/customer/email");
+  await page.getByRole("textbox", { name: "Tool-call log (JSON)" }).fill(JSON.stringify([
+    {
+      id: "call_searchable_01",
+      name: "fetch",
+      input: {
+        url: "https://user:URL_UI_SECRET_9x@example.test/mcp?token=QUERY_UI_SECRET_9x#fragment",
+        authorization: "Bearer AUTH_UI_SECRET_9x",
+        "X-API-Key": "X_API_KEY_UI_SECRET_9x",
+        customer: { email: "EMAIL_UI_SECRET_9x" },
+      },
+      error: "Failed https://user:ERROR_UI_SECRET_9x@example.test/mcp?token=ERR_QUERY_9x#fragment",
+      start_time_ms: 0,
+      end_time_ms: 10,
+      status: "error",
+    },
+  ]));
+  await page.getByRole("button", { name: "Analyze trace" }).click();
+
+  await expect(page.getByRole("status")).toHaveText("Redacted 5 values");
+  const editorValue = await page.getByRole("textbox", { name: "Tool-call log (JSON)" }).inputValue();
+  for (const secret of [
+    "URL_UI_SECRET_9x",
+    "QUERY_UI_SECRET_9x",
+    "AUTH_UI_SECRET_9x",
+    "X_API_KEY_UI_SECRET_9x",
+    "EMAIL_UI_SECRET_9x",
+    "ERROR_UI_SECRET_9x",
+    "ERR_QUERY_9x",
+  ]) {
+    expect(editorValue).not.toContain(secret);
+  }
+
+  const row = page.getByRole("button", { name: /^fetch, error,/ });
+  await row.hover();
+  await expect(page.getByRole("tooltip")).toContainText("https://example.test/mcp");
+  await row.click();
+  await expect(page.getByRole("dialog")).toContainText("call_searchable_01");
+  await expect(page.getByRole("dialog")).toContainText("[REDACTED]");
+  const rendered = await page.locator("body").innerText();
+  expect(rendered).not.toMatch(/(?:URL|QUERY|AUTH|EMAIL|ERROR)_UI_SECRET_9x|X_API_KEY_UI_SECRET_9x|ERR_QUERY_9x/);
+
+  await page.getByRole("button", { name: "Close call details" }).click();
+  await page.getByRole("button", { name: "Analyze trace" }).click();
+  await expect(page.locator("#stat-calls")).toHaveText("1");
+  await expect(page.getByRole("status")).toHaveText("Redacted 0 values");
+});
+
+test("clears the raw editor before reporting a redaction-path error", async ({ page }) => {
+  await page.goto("/static/");
+  await page.getByRole("checkbox", { name: "Redact common secrets" }).check();
+  await page.getByLabel("Additional redaction paths").fill("input/token");
+  await page.getByRole("textbox", { name: "Tool-call log (JSON)" }).fill(JSON.stringify([
+    {
+      id: "call_1",
+      name: "fetch",
+      input: { authorization: "Bearer ERROR_PATH_SECRET_9x" },
+      start_time_ms: 0,
+      end_time_ms: 1,
+      status: "success",
+    },
+  ]));
+  await page.getByRole("button", { name: "Analyze trace" }).click();
+
+  await expect(page.getByRole("alert")).toContainText("redaction paths must target");
+  await expect(page.getByRole("alert")).not.toContainText("ERROR_PATH_SECRET_9x");
+  await expect(page.getByRole("textbox", { name: "Tool-call log (JSON)" })).toHaveValue("");
+});
+
+test("does not echo invalid trace values when redaction is enabled", async ({ page }) => {
+  await page.goto("/static/");
+  await page.getByLabel("Format").selectOption("generic");
+  await page.getByRole("checkbox", { name: "Redact common secrets" }).check();
+  await page.getByRole("textbox", { name: "Tool-call log (JSON)" }).fill(JSON.stringify([
+    {
+      id: "call_1",
+      name: "search",
+      input: {},
+      start_time_ms: 0,
+      end_time_ms: 1,
+      status: "STATUS_ERROR_SECRET_9x",
+    },
+  ]));
+  await page.getByRole("button", { name: "Analyze trace" }).click();
+
+  await expect(page.getByRole("alert")).toContainText("input could not be parsed or redacted");
+  await expect(page.getByRole("alert")).not.toContainText("STATUS_ERROR_SECRET_9x");
+  await expect(page.getByRole("textbox", { name: "Tool-call log (JSON)" })).toHaveValue("");
 });
 
 test("announces invalid input next to the editor", async ({ page }) => {

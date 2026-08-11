@@ -38,11 +38,13 @@
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
-    button, textarea { font: inherit; }
+    button, input, select, textarea { font: inherit; }
 
-    button, a, textarea { -webkit-tap-highlight-color: transparent; }
+    button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 
     button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
     textarea:focus-visible,
     a:focus-visible {
       outline: 3px solid var(--focus);
@@ -139,39 +141,81 @@
     }
 
     #format-selector {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 4px;
-      padding: 3px;
-      background: var(--surface-muted);
-      border: 1px solid var(--border);
+      width: 100%;
+      min-height: 38px;
+      padding: 7px 34px 7px 10px;
+      color: var(--text);
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
       border-radius: 6px;
-    }
-
-    #format-selector button {
-      min-height: 34px;
-      padding: 6px 10px;
-      color: var(--text-muted);
-      background: transparent;
-      border: 1px solid transparent;
-      border-radius: 4px;
       cursor: pointer;
       font-size: 12px;
       font-weight: 650;
-      transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+      transition: border-color 160ms ease;
     }
 
-    #format-selector button[aria-pressed="true"] {
+    #format-selector:hover,
+    #format-selector:focus-visible {
+      border-color: var(--focus);
+    }
+
+    #redaction-controls {
+      display: grid;
+      gap: 7px;
+      padding-block: 2px;
+    }
+
+    .checkbox-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
       color: var(--text);
-      background: var(--surface);
-      border-color: var(--border-strong);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 650;
     }
 
-    #format-selector button:hover { color: var(--text); }
+    .checkbox-control input {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
+
+    #redaction-paths {
+      width: 100%;
+      min-height: 54px;
+      max-height: 96px;
+      padding: 8px 10px;
+      resize: vertical;
+      color: var(--text);
+      background: #fafcfa;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    #redaction-paths:disabled {
+      cursor: not-allowed;
+      opacity: 0.58;
+    }
+
+    #redaction-status {
+      min-height: 16px;
+      margin: 0;
+      color: var(--primary);
+      font-size: 11px;
+      font-weight: 650;
+      line-height: 1.4;
+    }
 
     #json-input {
       flex: 1 1 auto;
-      min-height: 220px;
+      min-height: 180px;
       width: 100%;
       padding: 11px 12px;
       resize: vertical;
@@ -514,12 +558,12 @@
         flex: none;
         width: 100%;
         min-width: 0;
-        min-height: 430px;
+        min-height: 590px;
         border-right: 0;
         border-bottom: 1px solid var(--border);
       }
 
-      #trace-form { min-height: 370px; }
+      #trace-form { min-height: 530px; }
       #results-panel { min-height: 520px; overflow: visible; }
       #timeline { min-height: 330px; }
 
@@ -570,14 +614,28 @@
           <h2 id="input-heading">Trace input</h2>
         </div>
         <form id="trace-form">
-          <span class="control-label" id="format-label">Format</span>
-          <div id="format-selector" role="group" aria-labelledby="format-label">
-            <button type="button" data-format="generic" aria-pressed="true">Generic JSON</button>
-            <button type="button" data-format="openai" aria-pressed="false">OpenAI run steps</button>
+          <label class="control-label" for="format-selector">Format</label>
+          <select id="format-selector">
+            <option value="auto" selected>Auto-detect</option>
+            <option value="generic">Generic JSON</option>
+            <option value="openai">OpenAI run steps</option>
+            <option value="openai-agents">OpenAI Agents SDK</option>
+            <option value="langchain">LangChain Run</option>
+            <option value="pydantic-ai">PydanticAI / Logfire</option>
+          </select>
+
+          <div id="redaction-controls">
+            <label class="checkbox-control" for="redact-secrets">
+              <input id="redact-secrets" type="checkbox">
+              <span>Redact common secrets</span>
+            </label>
+            <label class="control-label" for="redaction-paths">Additional redaction paths</label>
+            <textarea id="redaction-paths" rows="2" spellcheck="false" placeholder="/input/customer/email" disabled></textarea>
+            <p id="redaction-status" role="status" aria-live="polite"></p>
           </div>
 
           <label class="control-label" for="json-input">Tool-call log (JSON)</label>
-          <textarea id="json-input" aria-describedby="error-message" spellcheck="false" placeholder="JSON tool-call log"></textarea>
+          <textarea id="json-input" aria-describedby="redaction-status error-message" spellcheck="false" placeholder="JSON tool-call log"></textarea>
           <button id="analyze-button" type="submit">Analyze trace</button>
           <p id="error-message" role="alert" aria-live="assertive"></p>
         </form>
@@ -626,17 +684,22 @@
   <script type="module">
     import init, {
       wasm_analyze,
+      wasm_auto_parse,
       wasm_parse_generic_array,
       wasm_parse_openai_format,
+      wasm_redact_log,
     } from "./pkg/tool_call_trace_web.js";
 
     let currentLog = null;
     let currentAnalysis = null;
-    let selectedFormat = "generic";
     let detailTrigger = null;
     let resizeFrame = null;
 
     const input = document.getElementById("json-input");
+    const formatSelector = document.getElementById("format-selector");
+    const redactSecrets = document.getElementById("redact-secrets");
+    const redactionPaths = document.getElementById("redaction-paths");
+    const redactionStatus = document.getElementById("redaction-status");
     const analyzeButton = document.getElementById("analyze-button");
     const errorMessage = document.getElementById("error-message");
     const timeline = document.getElementById("timeline");
@@ -670,18 +733,65 @@
           { id: "step_3", step_details: { type: "tool_calls", tool_calls: [{ id: "call_fetch", type: "function", function: { name: "web_fetch", arguments: "{\"url\":\"https://api.example.com\"}" } }] }, created_at: 1715000025, failed_at: 1715000030, status: "failed" },
         ],
       }, null, 2),
+      "openai-agents": JSON.stringify({
+        data: [{
+          object: "trace.span",
+          id: "span_openai_search_01",
+          trace_id: "trace_openai_public_fixture",
+          parent_id: null,
+          started_at: "2026-08-11T09:00:00.000Z",
+          ended_at: "2026-08-11T09:00:00.125Z",
+          span_data: {
+            type: "function",
+            name: "search_docs",
+            input: "{\"query\":\"Rust WASM\"}",
+            output: "{\"matches\":2}",
+            mcp_data: null,
+          },
+          error: null,
+        }],
+      }, null, 2),
+      langchain: JSON.stringify({
+        id: "1f6a5b0d-ecfe-4f37-9f1d-a1b6c6c98901",
+        name: "shell",
+        start_time: "2023-01-01T00:00:00.000000+00:00",
+        end_time: "2023-01-01T00:00:00.090000+00:00",
+        inputs: { command: "printf hello", timeout: null },
+        outputs: { output: "hello" },
+        error: null,
+        run_type: "tool",
+        trace_id: "1f6a5b0d-ecfe-4f37-9f1d-a1b6c6c98901",
+        child_runs: [],
+      }, null, 2),
+      "pydantic-ai": JSON.stringify([{
+        name: "running tool",
+        context: { trace_id: 1, span_id: 5, is_remote: false },
+        parent: null,
+        start_time: 4000000000,
+        end_time: 4040000000,
+        attributes: {
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "add_numbers",
+          "gen_ai.tool.call.id": "pyd_ai_call_01",
+          "gen_ai.tool.call.arguments": "{\"x\":42,\"y\":42}",
+          "gen_ai.tool.call.result": "84",
+          "logfire.msg": "running tool: add_numbers",
+          "logfire.span_type": "span",
+        },
+        status: { status_code: "UNSET" },
+      }], null, 2),
     };
+    samples.auto = samples.generic;
 
-    document.getElementById("format-selector").addEventListener("click", (event) => {
-      const button = event.target.closest("button[data-format]");
-      if (!button) return;
-
-      selectedFormat = button.dataset.format;
-      document.querySelectorAll("#format-selector button").forEach((candidate) => {
-        candidate.setAttribute("aria-pressed", String(candidate === button));
-      });
-      input.value = samples[selectedFormat];
+    formatSelector.addEventListener("change", () => {
+      input.value = samples[formatSelector.value];
+      redactionStatus.textContent = "";
       showError(null);
+    });
+
+    redactSecrets.addEventListener("change", () => {
+      redactionPaths.disabled = !redactSecrets.checked;
+      redactionStatus.textContent = "";
     });
 
     document.getElementById("trace-form").addEventListener("submit", (event) => {
@@ -698,26 +808,69 @@
       }
 
       showError(null);
+      redactionStatus.textContent = "";
+      const shouldRedact = redactSecrets.checked;
+      if (shouldRedact) input.value = "";
       analyzeButton.disabled = true;
       analyzeButton.textContent = "Analyzing...";
 
       try {
-        currentLog = selectedFormat === "openai"
-          ? wasm_parse_openai_format(json)
-          : wasm_parse_generic_array(json);
+        const format = formatSelector.value;
+        const parsedLog = format === "generic"
+          ? wasm_parse_generic_array(json)
+          : format === "openai"
+            ? wasm_parse_openai_format(json)
+            : wasm_auto_parse(json);
+
+        if (shouldRedact) {
+          const paths = redactionPaths.value
+            .split(/\r?\n/)
+            .map((path) => path.trim())
+            .filter(Boolean);
+          const outcome = wasm_redact_log(
+            JSON.stringify(parsedLog),
+            JSON.stringify({ paths }),
+          );
+          currentLog = outcome.log;
+          const reparsableCalls = currentLog.calls.map((call) => {
+            const genericCall = { ...call };
+            delete genericCall.duration_ms;
+            return genericCall;
+          });
+          input.value = JSON.stringify(reparsableCalls, null, 2);
+          formatSelector.value = "generic";
+          redactionStatus.textContent = `Redacted ${outcome.redacted_values} ${outcome.redacted_values === 1 ? "value" : "values"}`;
+        } else {
+          currentLog = parsedLog;
+        }
         currentAnalysis = wasm_analyze(JSON.stringify(currentLog), 5_000);
         renderTimeline();
         renderStats();
       } catch (error) {
+        if (shouldRedact) input.value = "";
         currentLog = null;
         currentAnalysis = null;
         renderEmptyState();
         clearStats();
-        showError(`Unable to analyze trace: ${error.message || error}`);
+        showError(shouldRedact
+          ? safeRedactionError(error)
+          : `Unable to analyze trace: ${error.message || error}`);
       } finally {
         analyzeButton.disabled = false;
         analyzeButton.textContent = "Analyze trace";
       }
+    }
+
+    function safeRedactionError(error) {
+      const message = error?.message || String(error);
+      const safeDetails = [
+        "redaction paths must target /input, /output, or /error",
+        "redaction paths must use valid JSON Pointer escapes",
+      ];
+      const detail = safeDetails.find((candidate) => message.includes(candidate));
+      return detail
+        ? `Unable to analyze trace: ${detail}`
+        : "Unable to analyze trace: input could not be parsed or redacted; the source input was cleared.";
     }
 
     function showError(message) {

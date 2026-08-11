@@ -2,36 +2,62 @@
 
 [English](README.md)
 
-[打开浏览器预览](https://tinkora.github.io/tool_call_trace/)
+[打开浏览器工具](https://tinkora.github.io/tool_call_trace/)
 
-[下载 v0.1.0 及验证资产](https://github.com/Tinkora/tool_call_trace/releases/tag/v0.1.0)
+[下载 v0.2.0 及验证资产](https://github.com/Tinkora/tool_call_trace/releases/tag/v0.2.0)
 
-Tool Call Trace 是一个在浏览器本地运行的 AI Agent 工具调用瀑布流查看器。它把
-Generic JSON trace 和 OpenAI run steps 转换为相对时间线，并展示输入、输出、延迟、
-错误、重复调用和慢调用；trace 不会上传到服务器。
+Tool Call Trace 是一个在浏览器本地运行的 AI Agent 工具调用瀑布流查看器和契约检查器。
+它可以导入 Generic JSON、OpenAI run steps、OpenAI Agents SDK span、LangChain Run
+和 PydanticAI/Logfire span，并且不会上传 trace。显式开启脱敏后，常见凭据和指定字段会
+在分析或显示前被替换。
 
-> 状态：预发布成熟度。`v0.1.0` 是首个版本化浏览器 Release；当前没有 Package 或
-> Agent transport。
+> 状态：预发布成熟度。`v0.2.0` 新增 Agent SDK 导入、本地脱敏和命令行契约检查器；
+> 当前没有发布 Package 或 Agent transport。
 
 ## 当前能力
 
-- 解析具有明确时间戳和状态的严格 Generic JSON 数组。
-- 解析包含 `function` 工具调用和时间戳的 OpenAI run steps。
-- 将绝对时间戳归一化为相对 trace 起点的毫秒数。
-- 展示总耗时、平均耗时、最大耗时、错误率、调用频率、重复调用和慢调用。
-- 只通过文本 DOM 节点呈现不可信的输入和输出。
-- 使用 Rust 和 WebAssembly 完全在浏览器本地运行。
-- 拒绝超过 5 MiB 的输入或超过 2,000 次调用的 trace。
+- 自动检测或显式解析五种带时间戳的 trace 契约。
+- 将绝对时间或 exporter 时间戳归一化为相对 trace 起点的毫秒数。
+- 在支持键盘操作的瀑布流中展示总耗时、平均耗时、最大耗时、错误率、调用频率、
+  重复调用和慢调用。
+- 只通过纯文本 DOM 节点呈现不可信的输入和输出。
+- 显式脱敏常见 authorization、API key、token、password、secret 和 private key 字段，
+  HTTP(S) URL 的 user-info、query、fragment，以及精确 JSON Pointer 路径。
+- 保留 trace ID 和 call ID，确保排查过程仍可搜索。
+- 通过 `tool-call-trace check` 从文件或 stdin 校验并归一化相同契约。
+- 拒绝超过 5 MiB 或 100,000 行的输入，以及超过 2,000 次调用的 trace。
 
-## 明确限制
+## 支持的输入
 
-- 不接受缺少时间信息的 Anthropic message block，也不会编造占位延迟。
-- 当前仓库没有 MCP server、可执行 Agent tool 或远程 API；现有接口只有浏览器 UI
-  和 Rust/WASM API。
-- 不会自动脱敏。分享截图或复制输出前，请先移除凭据和个人数据。
-- 本工具只分析静态日志，不是实时 tracer，也不替代 APM。
+| 格式 | 接受的带时间戳导出 |
+| --- | --- |
+| Generic JSON | 包含毫秒时间戳和状态的严格扁平数组 |
+| OpenAI run steps | 包含 function tool call step 的 `data` 列表 |
+| OpenAI Agents SDK | 包含 RFC 3339 时间的 `trace.span` function span |
+| LangChain | Tool `Run` 对象、数组、`runs` wrapper 和 `child_runs` |
+| PydanticAI / Logfire | `exported_spans_as_dict()` 产生的 OTel tool span |
 
-## 本地运行
+Fixture 的来源和固定上游 revision 记录在
+[fixture 来源说明](crates/tool_call_trace_core/tests/fixtures/SOURCES.md)中。
+
+Anthropic message block 不包含开始和结束时间，因此明确不支持。Tool Call Trace 不会
+编造延迟。
+
+## 本地脱敏
+
+脱敏默认关闭。在浏览器中启用 **Redact common secrets**，或向 CLI 传递 `--redact`。
+附加路径是相对于每个归一化 call 的精确 JSON Pointer，例如
+`/input/customer/email` 或 `/output/session/token`。
+
+```bash
+cargo run -p tool_call_trace_cli -- \
+  check --redact --redact-path /input/customer/email trace.json
+```
+
+结果会报告替换值数量，并使用 `[REDACTED]` 标记。脱敏是边界明确的安全辅助功能，
+不是完整的凭据或个人数据检测器；分享输出前仍需复核。
+
+## 浏览器快速开始
 
 前置条件：Rust 1.95.0、`wasm32-unknown-unknown` target、`wasm-pack` 0.15.0，
 以及 Python 3 或其他静态文件服务器。
@@ -45,6 +71,19 @@ python3 -m http.server 4174 --bind 127.0.0.1 --directory crates/tool_call_trace_
 ```
 
 打开 `http://127.0.0.1:4174/static/`。
+
+## CLI 快速开始
+
+使用 `-` 或省略路径可读取 stdin。`--format` 支持 `auto`、`generic`、
+`openai-run-steps`、`openai-agents`、`langchain` 和 `pydantic-ai`。
+
+```bash
+cargo run -p tool_call_trace_cli -- check --format auto trace.json
+cargo run -p tool_call_trace_cli -- check --redact - < trace.json
+```
+
+成功时，归一化 JSON 写入 stdout；诊断和脱敏计数写入 stderr。无效 trace 契约返回
+退出码 `1`，无效命令用法返回退出码 `2`。
 
 ## Generic 输入
 
@@ -67,6 +106,14 @@ python3 -m http.server 4174 --bind 127.0.0.1 --directory crates/tool_call_trace_
 ]
 ```
 
+## 明确限制
+
+- 本工具只分析静态日志，不是实时 tracer，也不替代 APM。
+- 仓库不包含托管 API、MCP server、可执行 Agent tool、账号系统、存储服务或遥测。
+- Exporter 导入以数据契约为边界，不会安装或插桩上游 SDK。
+- 脱敏必须显式开启且属于 best-effort；它会保留 trace ID 和 call ID，也不声称完整检测
+  PII。
+
 ## 开发
 
 ```bash
@@ -82,7 +129,8 @@ npm run test:wasm-smoke
 ```
 
 浏览器测试会在 375、768、1024 和 1440 像素宽度下运行 Chromium，并验证真实 WASM
-边界、主流程、键盘 dialog、错误播报、reduced motion、console、外部请求和横向溢出。
+边界、解析和脱敏流程、键盘 dialog、无 secret 错误、reduced motion、console、外部请求
+和横向溢出。
 
 ## 文档
 

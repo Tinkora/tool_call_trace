@@ -1,6 +1,7 @@
 use serde::Serialize;
 use tool_call_trace_core::{
     CoreError, analyze_json, auto_parse_json, parse_generic_array_json, parse_openai_format_json,
+    redact_log_json,
 };
 use wasm_bindgen::prelude::*;
 
@@ -44,8 +45,13 @@ pub fn wasm_analyze(log_json: &str, slow_threshold_ms: Option<u32>) -> Result<Js
     parse_and_return(result)
 }
 
-/// Auto-detect the format of a tool-call log and parse it.
-/// Tries OpenAI, then Generic Array format.
+/// Redact a normalized log with a JSON `RedactionConfig` object.
+#[wasm_bindgen]
+pub fn wasm_redact_log(log_json: &str, config_json: &str) -> Result<JsValue, JsValue> {
+    parse_and_return(redact_log_json(log_json, config_json))
+}
+
+/// Auto-detect Generic, OpenAI, OpenAI Agents, LangChain, or PydanticAI traces.
 #[wasm_bindgen]
 pub fn wasm_auto_parse(json: &str) -> Result<JsValue, JsValue> {
     parse_and_return(auto_parse_json(json))

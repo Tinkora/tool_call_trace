@@ -1,6 +1,8 @@
 use crate::analyze::full_analyze;
 use crate::error::CoreError;
+use crate::import::parse_agent_trace;
 use crate::parse::{self, ToolCallLog};
+use crate::redact::{RedactionConfig, redact_log};
 
 /// Parse a tool-call log in OpenAI run-steps format.
 /// Returns the ToolCallLog serialized as a JSON string.
@@ -26,13 +28,19 @@ pub fn analyze_json(log_json: &str, slow_threshold_ms: Option<u64>) -> Result<St
     serde_json::to_string(&analysis).map_err(|e| CoreError::ParseError(e.to_string()))
 }
 
-/// Auto-detect the format of a tool-call log and parse it.
-/// Tries OpenAI, then Generic Array format.
+/// Redacts a normalized ToolCallLog JSON using a RedactionConfig JSON object.
+pub fn redact_log_json(log_json: &str, config_json: &str) -> Result<String, CoreError> {
+    let log: ToolCallLog =
+        serde_json::from_str(log_json).map_err(|error| CoreError::ParseError(error.to_string()))?;
+    let config: RedactionConfig = serde_json::from_str(config_json)
+        .map_err(|error| CoreError::InvalidFormat(format!("invalid redaction config: {error}")))?;
+    let outcome = redact_log(&log, &config)?;
+    serde_json::to_string(&outcome).map_err(|e| CoreError::ParseError(e.to_string()))
+}
+
+/// Auto-detects Generic, OpenAI, OpenAI Agents, LangChain, or PydanticAI traces.
 pub fn auto_parse_json(json: &str) -> Result<String, CoreError> {
-    if let Ok(log) = parse::parse_openai_format(json) {
-        return serde_json::to_string(&log).map_err(|e| CoreError::ParseError(e.to_string()));
-    }
-    let log = parse::parse_generic_array(json)?;
+    let log = parse_agent_trace(json)?;
     serde_json::to_string(&log).map_err(|e| CoreError::ParseError(e.to_string()))
 }
 
@@ -105,5 +113,17 @@ mod tests {
         }"#;
 
         assert!(auto_parse_json(input).is_err());
+    }
+
+    #[test]
+    fn redact_json_returns_a_secret_free_outcome() {
+        let input = r#"[
+            {"id":"call_1","name":"search","input":{"api_key":"SECRET"},"start_time_ms":0,"end_time_ms":1,"status":"success"}
+        ]"#;
+        let log_json = parse_generic_array_json(input).unwrap();
+        let outcome_json = redact_log_json(&log_json, r#"{"paths":[]}"#).unwrap();
+        let outcome: serde_json::Value = serde_json::from_str(&outcome_json).unwrap();
+        assert_eq!(outcome["redacted_values"], 1);
+        assert_eq!(outcome["log"]["calls"][0]["input"]["api_key"], "[REDACTED]");
     }
 }
