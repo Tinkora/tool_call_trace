@@ -24,16 +24,19 @@ contract without uploading the trace.
 
 All formats share the existing 5 MiB and 2,000-call limits plus a 100,000-line
 limit. Every imported tool call must have a non-empty stable ID and name, a
-real start time, and an end time that does not precede it.
+real start time, and an optional end time that does not precede it. Missing end
+times map to zero-duration pending calls.
 
 - OpenAI Agents: an array of exported spans. Only `span_data.type ==
   "function"` becomes a tool call. RFC 3339 `started_at` and `ended_at` are
-  required.
+  accepted; `started_at` is required and `ended_at` is optional for pending
+  spans. Exporter wrappers use `{ "data": [...] }`.
 - LangChain: a run object, an array of runs, or a wrapper with `runs`. Only
   `run_type == "tool"` becomes a tool call. Nested `child_runs` are traversed.
 - PydanticAI/Logfire: the public `exported_spans_as_dict()` array. Only spans
   whose attributes contain `gen_ai.operation.name == "execute_tool"` become
-  tool calls. `start_time` and `end_time` are required.
+  tool calls. OTel nanoseconds and RFC 3339 timestamps are accepted. A missing
+  `end_time` or deferral attribute maps to pending.
 
 Auto-detection returns the first structurally recognized format. A recognized
 but invalid format fails loudly instead of falling through to another parser.
@@ -50,15 +53,18 @@ returns `RedactionOutcome { log, redacted_values }` and uses the stable marker
 Traversal is deterministic:
 
 1. Exact configured paths redact the matched value.
-2. Object keys matching the documented sensitive-key set redact their value.
+2. Object keys matching the documented sensitive-key set, including the
+   standard `X-API-Key` header, redact their value.
 3. Remaining string values that are valid HTTP(S) URLs lose user-info, query,
    and fragment components while retaining scheme, host, port, and path.
 4. Arrays and nested objects are visited recursively with bounded input size
    and call count already enforced by parsing.
 
-The core never includes raw input JSON in parse errors. Browser and CLI code
-operate only on the returned normalized/redacted log after redaction is
-enabled.
+The core never includes the raw input document in parse errors, although data
+errors can contain an invalid field value. After redaction is requested, the
+browser clears its editor before parsing and both browser and CLI suppress
+parser details that could echo user values. Successful analysis, display, and
+JSON output operate only on the returned redacted log.
 
 ## Surfaces
 
@@ -81,4 +87,3 @@ enabled.
   and byte/line/call limits apply before rendering.
 - Rust formatting, tests, Clippy, WASM build, compiled WASM smoke tests, and
   Chromium at 375, 768, 1024, and 1440 pixels form the release gate.
-
