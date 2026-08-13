@@ -192,6 +192,21 @@ fn redact_value(
             }
         }
         Value::String(text) if text != REDACTION_MARKER => {
+            // Some exporters encode tool output as a JSON string. Decode only
+            // object/array strings and keep ordinary text byte-for-byte stable.
+            if let Ok(mut decoded) = serde_json::from_str::<Value>(text)
+                && matches!(decoded, Value::Object(_) | Value::Array(_))
+            {
+                let before = *redacted_values;
+                redact_value(&mut decoded, path, configured_paths, redacted_values);
+                if *redacted_values > before {
+                    if let Ok(encoded) = serde_json::to_string(&decoded) {
+                        *text = encoded;
+                    }
+                    return;
+                }
+            }
+
             let (sanitized, count) = sanitize_urls_in_text(text);
             if count > 0 {
                 *text = sanitized;
