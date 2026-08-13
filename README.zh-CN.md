@@ -2,6 +2,8 @@
 
 [English](README.md)
 
+[![在 Ko-fi 上支持 Tinkora](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/tinkora)
+
 [打开浏览器工具](https://tinkora.github.io/tool_call_trace/)
 
 [下载 v0.2.0 及验证资产](https://github.com/Tinkora/tool_call_trace/releases/tag/v0.2.0)
