@@ -2,7 +2,17 @@
 
 [简体中文](README.zh-CN.md)
 
-[![Support Tinkora on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/tinkora)
+<!-- markdownlint-disable MD033 -->
+<p align="center">
+  <a href="https://ko-fi.com/tinkora" target="_blank" rel="noopener noreferrer">
+    <img
+      src="https://ko-fi.com/img/githubbutton_sm.svg"
+      alt="Support Tinkora on Ko-fi"
+      width="520"
+    >
+  </a>
+</p>
+<!-- markdownlint-enable MD033 -->
 
 [![Pages](https://github.com/Tinkora/tool_call_trace/actions/workflows/pages.yml/badge.svg)](https://github.com/Tinkora/tool_call_trace/actions/workflows/pages.yml)
 [![Supply chain](https://github.com/Tinkora/tool_call_trace/actions/workflows/supply-chain.yml/badge.svg)](https://github.com/Tinkora/tool_call_trace/actions/workflows/supply-chain.yml)
