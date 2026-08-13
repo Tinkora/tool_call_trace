@@ -10,7 +10,10 @@ updates:
       timezone: Asia/Shanghai
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
+    groups:
+      actions-patch-minor:
+        update-types: [patch, minor]
 
   - package-ecosystem: cargo
     directory: /
@@ -21,7 +24,10 @@ updates:
       timezone: Asia/Shanghai
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
+    groups:
+      cargo-patch-minor:
+        update-types: [patch, minor]
 
   - package-ecosystem: npm
     directory: /crates/tool_call_trace_web
@@ -32,4 +38,7 @@ updates:
       timezone: Asia/Shanghai
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
+    groups:
+      npm-patch-minor:
+        update-types: [patch, minor]
