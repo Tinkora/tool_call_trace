@@ -1,4 +1,6 @@
-use tool_call_trace_core::{RedactionConfig, ToolCallLog, parse_generic_array, redact_log};
+use tool_call_trace_core::{
+    RedactionConfig, ToolCallLog, parse_generic_array, parse_openai_format, redact_log,
+};
 
 const URL_PASSWORD: &str = "URL_PASSWORD_SENTINEL_9x";
 const QUERY_TOKEN: &str = "QUERY_TOKEN_SENTINEL_9x";
@@ -6,6 +8,7 @@ const AUTH_TOKEN: &str = "AUTH_TOKEN_SENTINEL_9x";
 const API_KEY: &str = "API_KEY_SENTINEL_9x";
 const X_API_KEY: &str = "X_API_KEY_SENTINEL_9x";
 const CUSTOM_VALUE: &str = "CUSTOM_VALUE_SENTINEL_9x";
+const JSON_OUTPUT_SECRET: &str = "JSON_OUTPUT_SECRET_9x";
 
 fn sensitive_log() -> ToolCallLog {
     parse_generic_array(&format!(
@@ -139,4 +142,61 @@ fn redaction_is_idempotent() {
         serde_json::to_value(first.log).unwrap(),
         serde_json::to_value(second.log).unwrap()
     );
+}
+
+#[test]
+fn redacts_credentials_inside_json_encoded_output_strings() {
+    let log = parse_generic_array(&format!(
+        r#"[
+          {{
+            "id":"call_json_output",
+            "name":"fetch",
+            "input":{{}},
+            "output":"{{\"api_key\":\"{JSON_OUTPUT_SECRET}\",\"ok\":true}}",
+            "start_time_ms":0,
+            "end_time_ms":1,
+            "status":"success"
+          }}
+        ]"#
+    ))
+    .unwrap();
+
+    let outcome = redact_log(&log, &RedactionConfig::default()).unwrap();
+    let output = outcome.log.calls[0].output.as_ref().unwrap();
+
+    assert!(
+        !serde_json::to_string(&outcome)
+            .unwrap()
+            .contains(JSON_OUTPUT_SECRET)
+    );
+    assert_eq!(
+        output,
+        &serde_json::json!(r#"{"api_key":"[REDACTED]","ok":true}"#)
+    );
+    assert_eq!(outcome.redacted_values, 1);
+}
+
+#[test]
+fn redacts_credentials_inside_openai_encoded_output_strings() {
+    let log = parse_openai_format(&format!(
+        r#"{{"object":"list","data":[{{
+          "id":"step_1",
+          "step_details":{{"type":"tool_calls","tool_calls":[{{
+            "id":"call_openai_output",
+            "type":"function",
+            "function":{{"name":"fetch","arguments":"{{}}","output":"{{\"token\":\"{JSON_OUTPUT_SECRET}\"}}"}}
+          }}]}},
+          "created_at":1,"completed_at":2,"status":"completed"
+        }}]}}"#
+    ))
+    .unwrap();
+
+    let outcome = redact_log(&log, &RedactionConfig::default()).unwrap();
+
+    assert!(
+        !serde_json::to_string(&outcome)
+            .unwrap()
+            .contains(JSON_OUTPUT_SECRET)
+    );
+    assert_eq!(outcome.redacted_values, 1);
 }
