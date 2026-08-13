@@ -2,6 +2,8 @@
 
 [简体中文](README.zh-CN.md)
 
+[![Support Tinkora on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/tinkora)
+
 [![Pages](https://github.com/Tinkora/tool_call_trace/actions/workflows/pages.yml/badge.svg)](https://github.com/Tinkora/tool_call_trace/actions/workflows/pages.yml)
 [![Supply chain](https://github.com/Tinkora/tool_call_trace/actions/workflows/supply-chain.yml/badge.svg)](https://github.com/Tinkora/tool_call_trace/actions/workflows/supply-chain.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-176b55.svg)](LICENSE)
