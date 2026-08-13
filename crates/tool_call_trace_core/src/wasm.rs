@@ -30,10 +30,10 @@ pub fn analyze_json(log_json: &str, slow_threshold_ms: Option<u64>) -> Result<St
 
 /// Redacts a normalized ToolCallLog JSON using a RedactionConfig JSON object.
 pub fn redact_log_json(log_json: &str, config_json: &str) -> Result<String, CoreError> {
-    let log: ToolCallLog =
-        serde_json::from_str(log_json).map_err(|error| CoreError::ParseError(error.to_string()))?;
+    let log: ToolCallLog = serde_json::from_str(log_json)
+        .map_err(|_| CoreError::ParseError("invalid normalized tool-call log".into()))?;
     let config: RedactionConfig = serde_json::from_str(config_json)
-        .map_err(|error| CoreError::InvalidFormat(format!("invalid redaction config: {error}")))?;
+        .map_err(|_| CoreError::InvalidFormat("invalid redaction config".into()))?;
     let outcome = redact_log(&log, &config)?;
     serde_json::to_string(&outcome).map_err(|e| CoreError::ParseError(e.to_string()))
 }
@@ -125,5 +125,30 @@ mod tests {
         let outcome: serde_json::Value = serde_json::from_str(&outcome_json).unwrap();
         assert_eq!(outcome["redacted_values"], 1);
         assert_eq!(outcome["log"]["calls"][0]["input"]["api_key"], "[REDACTED]");
+    }
+
+    #[test]
+    fn redact_json_does_not_echo_values_from_invalid_normalized_logs() {
+        let invalid_log = r#"{
+            "trace_id":"trace_1",
+            "calls":[{
+                "id":"call_1",
+                "name":"fetch",
+                "input":{},
+                "output":null,
+                "error":null,
+                "start_time_ms":0,
+                "end_time_ms":1,
+                "duration_ms":1,
+                "status":"STATUS_SECRET_9x"
+            }],
+            "total_time_ms":1,
+            "total_calls":1,
+            "error_count":0
+        }"#;
+
+        let error = redact_log_json(invalid_log, r#"{"paths":[]}"#).unwrap_err();
+        assert_eq!(error.code(), "PARSE_ERROR");
+        assert!(!error.to_string().contains("STATUS_SECRET_9x"));
     }
 }
