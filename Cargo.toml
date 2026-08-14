@@ -11,7 +11,7 @@ edition = "2024"
 license = "MIT"
 repository = "https://github.com/Tinkora/tool_call_trace"
 rust-version = "1.95"
-version = "0.2.0"
+version = "0.2.1"
 
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
