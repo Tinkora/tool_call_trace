@@ -34,7 +34,8 @@ Tool Call Trace 是一个在浏览器本地运行的 AI Agent 工具调用瀑布
   重复调用和慢调用。
 - 只通过纯文本 DOM 节点呈现不可信的输入和输出。
 - 显式脱敏常见 authorization、API key、token、password、secret 和 private key 字段，
-  HTTP(S) URL 的 user-info、query、fragment，以及精确 JSON Pointer 路径。
+  自由文本中的凭据赋值和 authorization header、HTTP(S) URL 的 user-info、query、
+  fragment，以及精确 JSON Pointer 路径。
 - 保留 trace ID 和 call ID，确保排查过程仍可搜索。
 - 通过 `tool-call-trace check` 从文件或 stdin 校验并归一化相同契约。
 - 拒绝超过 5 MiB 或 100,000 行的输入，以及超过 2,000 次调用的 trace。

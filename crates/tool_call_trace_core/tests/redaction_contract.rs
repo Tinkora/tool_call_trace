@@ -9,6 +9,9 @@ const API_KEY: &str = "API_KEY_SENTINEL_9x";
 const X_API_KEY: &str = "X_API_KEY_SENTINEL_9x";
 const CUSTOM_VALUE: &str = "CUSTOM_VALUE_SENTINEL_9x";
 const JSON_OUTPUT_SECRET: &str = "JSON_OUTPUT_SECRET_9x";
+const HEADER_SECRET: &str = "HEADER_SECRET_SENTINEL_9x";
+const TEXT_TOKEN: &str = "TEXT_TOKEN_SENTINEL_9x";
+const MARKER_SUFFIX_SECRET: &str = "MARKER_SUFFIX_SECRET_SENTINEL_9x";
 
 fn sensitive_log() -> ToolCallLog {
     parse_generic_array(&format!(
@@ -199,4 +202,51 @@ fn redacts_credentials_inside_openai_encoded_output_strings() {
             .contains(JSON_OUTPUT_SECRET)
     );
     assert_eq!(outcome.redacted_values, 1);
+}
+
+#[test]
+fn redacts_free_text_credentials_without_removing_benign_context() {
+    let log = parse_generic_array(&format!(
+        r#"[
+          {{
+            "id":"call_text_output",
+            "name":"fetch",
+            "input":{{"token_count":12,"secretary":"Alice"}},
+            "output":"request_id=request_searchable_02\nAuthorization: \"Bearer {HEADER_SECRET}\"\nstatus=401",
+            "error":"access_token=\"{TEXT_TOKEN}\"; refresh_token=\"[REDACTED]{MARKER_SUFFIX_SECRET}\"; request_id=request_searchable_02",
+            "start_time_ms":0,
+            "end_time_ms":1,
+            "status":"error"
+          }}
+        ]"#
+    ))
+    .unwrap();
+
+    let outcome = redact_log(&log, &RedactionConfig::default()).unwrap();
+    let serialized = serde_json::to_string(&outcome).unwrap();
+
+    assert!(!serialized.contains(HEADER_SECRET));
+    assert!(!serialized.contains(TEXT_TOKEN));
+    assert!(!serialized.contains(MARKER_SUFFIX_SECRET));
+    assert!(serialized.contains("request_searchable_02"));
+    assert!(serialized.contains("token_count"));
+    assert!(serialized.contains("secretary"));
+    assert_eq!(outcome.redacted_values, 3);
+    assert_eq!(
+        outcome.log.calls[0].output.as_ref().unwrap().as_str(),
+        Some("request_id=request_searchable_02\nAuthorization: [REDACTED]\nstatus=401")
+    );
+    assert_eq!(
+        outcome.log.calls[0].error.as_deref(),
+        Some(
+            "access_token=\"[REDACTED]\"; refresh_token=\"[REDACTED]\"; request_id=request_searchable_02"
+        )
+    );
+
+    let repeated = redact_log(&outcome.log, &RedactionConfig::default()).unwrap();
+    assert_eq!(repeated.redacted_values, 0);
+    assert_eq!(
+        serde_json::to_value(repeated.log).unwrap(),
+        serde_json::to_value(outcome.log).unwrap()
+    );
 }

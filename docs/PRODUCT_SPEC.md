@@ -10,6 +10,14 @@ calls. General JSON viewers expose structure but not timing relationships;
 hosted observability products can be too heavy or inappropriate for sensitive
 one-off traces.
 
+Public reports show the same data crossing multiple trace surfaces. OpenAI
+Agents issue [#4016](https://github.com/openai/openai-agents-python/issues/4016)
+demonstrated MCP URL credentials in errors, spans, and persisted metadata.
+Promptfoo PR [#10382](https://github.com/promptfoo/promptfoo/pull/10382)
+documents raw tool inputs, outputs, metadata, and error messages bypassing
+trace redaction, including free-text authorization headers and credential
+assignments.
+
 ## Target workflow
 
 1. Open the static browser tool or run the local CLI.
@@ -92,9 +100,15 @@ Rules run deterministically:
    `Proxy-Authorization`, `X-API-Key`, API/access/auth/bearer/refresh/session
    token or key names, client/private/secret key names, `password`, `passwd`,
    and `token`.
-3. Remaining string values are scanned for HTTP(S) URLs. User-info, query, and
+3. JSON-encoded object and array strings are decoded and traversed, then
+   serialized again only when a replacement occurs.
+4. Remaining string values are scanned for HTTP(S) URLs. User-info, query, and
    fragment components are removed while scheme, host, port, and path remain.
-4. Arrays and nested objects are traversed recursively.
+5. Free text uses the same sensitive-key allowlist for explicit `key: value`
+   and `key=value` assignments. `Authorization` and `Proxy-Authorization`
+   values are replaced through the end of their line so the credential scheme
+   cannot expose the following token.
+6. Arrays and nested objects are traversed recursively.
 
 Redaction is idempotent and does not claim exhaustive credential or personal
 data detection. When redaction is requested but parsing fails, the browser and
@@ -125,7 +139,8 @@ validation messages remain available.
 
 - Rust contract tests cover all five formats, timestamp normalization, pending
   and error mapping, duplicate IDs, resource limits, configured paths,
-  `X-API-Key`, idempotence, and secret-free redaction outcomes.
+  `X-API-Key`, encoded JSON, free-text credentials, idempotence, preserved
+  benign context, and secret-free redaction outcomes.
 - CLI process tests cover stdin and files, explicit and auto formats, exit
   codes, JSON output, replacement counts, and secret-free failures.
 - Chromium tests exercise compiled WASM at 375, 768, 1024, and 1440 pixels,

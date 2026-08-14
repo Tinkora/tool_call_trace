@@ -6,7 +6,12 @@ All notable changes will be documented in this file. The format follows
 
 ## [Unreleased]
 
-No unreleased changes.
+### Security
+
+- Redact credentials inside JSON-encoded output strings and keep parser or
+  redaction-boundary failures from echoing user values.
+- Redact free-text authorization headers and sensitive `key: value` or
+  `key=value` assignments while preserving benign investigation context.
 
 ## [0.2.0] - 2026-08-11
 
