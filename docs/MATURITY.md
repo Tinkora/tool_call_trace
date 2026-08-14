@@ -10,7 +10,7 @@ Current stage: **Pre-release**.
   contract tests.
 - The compiled WASM boundary and browser workflow are exercised in Chromium at
   four viewport widths.
-- `v0.2.0` provides a reproducible static browser archive with checksums, SBOM,
+- `v0.2.1` provides a reproducible static browser archive with checksums, SBOM,
   license evidence, and build attestations.
 - The CLI validates the same five trace contracts from files or stdin and uses
   stable non-zero exit codes for failures.

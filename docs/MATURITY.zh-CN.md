@@ -8,7 +8,7 @@
 
 - 核心解析、导入、脱敏和分析具有面向结果的 Rust 契约测试。
 - 编译后的 WASM 边界和浏览器流程已在四种视口宽度的 Chromium 中验证。
-- `v0.2.0` 提供可复现的静态浏览器归档，以及 checksum、SBOM、许可证证据和构建
+- `v0.2.1` 提供可复现的静态浏览器归档，以及 checksum、SBOM、许可证证据和构建
   attestation。
 - CLI 能从文件或 stdin 校验相同的五种 trace 契约，并为失败提供稳定的非零退出码。
 - OpenAI Agents、LangChain 和 PydanticAI fixture 引用了固定的上游契约来源与 MIT
