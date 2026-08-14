@@ -109,9 +109,28 @@ test("uses OpenAI terminal timestamps and preserves function output", async ({ p
   await expect(page.locator("#detail-body")).toContainText('{"matches":3}');
 });
 
-test("auto-detects a pinned Agent SDK export", async ({ page }) => {
+test("keeps the selected Agent SDK sample while WASM initializes", async ({ page }) => {
+  let markWasmRequested;
+  let releaseWasm;
+  const wasmRequested = new Promise((resolve) => {
+    markWasmRequested = resolve;
+  });
+  const wasmRelease = new Promise((resolve) => {
+    releaseWasm = resolve;
+  });
+  await page.route("**/*.wasm", async (route) => {
+    markWasmRequested();
+    await wasmRelease;
+    await route.continue();
+  });
+
   await page.goto("/static/");
+  await wasmRequested;
   await page.getByLabel("Format").selectOption("pydantic-ai");
+  await expect(page.getByRole("textbox", { name: "Tool-call log (JSON)" })).toHaveValue(
+    /"gen_ai\.tool\.name": "add_numbers"/,
+  );
+  releaseWasm();
   await page.getByRole("button", { name: "Analyze trace" }).click();
 
   await expect(page.locator("#stat-calls")).toHaveText("1");
