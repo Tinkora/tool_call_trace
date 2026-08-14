@@ -163,6 +163,151 @@ fn sanitize_urls_in_text(text: &str) -> (String, u32) {
     (output, redacted_values)
 }
 
+fn is_text_key_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')
+}
+
+fn line_value_end(text: &str, start: usize) -> usize {
+    text[start..]
+        .find(['\r', '\n'])
+        .map_or(text.len(), |relative| start + relative)
+}
+
+fn delimited_value_end(text: &str, start: usize) -> usize {
+    let bytes = text.as_bytes();
+    if matches!(bytes.get(start), Some(b'"' | b'\'')) {
+        let quote = bytes[start];
+        let mut index = start + 1;
+        let mut escaped = false;
+        while index < bytes.len() {
+            let byte = bytes[index];
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == quote {
+                return index;
+            }
+            index += 1;
+        }
+        return text.len();
+    }
+
+    let mut index = if text[start..].starts_with(REDACTION_MARKER) {
+        start + REDACTION_MARKER.len()
+    } else {
+        start
+    };
+    while index < bytes.len()
+        && !bytes[index].is_ascii_whitespace()
+        && !matches!(
+            bytes[index],
+            b';' | b',' | b'&' | b'#' | b'"' | b'\'' | b'}' | b']'
+        )
+    {
+        index += 1;
+    }
+    index
+}
+
+fn is_redaction_marker_text(value: &str) -> bool {
+    value == REDACTION_MARKER
+        || ['"', '\''].iter().any(|quote| {
+            value
+                .strip_prefix(*quote)
+                .and_then(|inner| inner.strip_suffix(*quote))
+                == Some(REDACTION_MARKER)
+        })
+}
+
+fn sanitize_credentials_in_text(text: &str) -> (String, u32) {
+    let bytes = text.as_bytes();
+    let mut output = String::with_capacity(text.len());
+    let mut cursor = 0;
+    let mut index = 0;
+    let mut redacted_values = 0u32;
+
+    while index < bytes.len() {
+        if !bytes[index].is_ascii_alphabetic() || (index > 0 && is_text_key_byte(bytes[index - 1]))
+        {
+            index += 1;
+            continue;
+        }
+
+        let key_start = index;
+        while index < bytes.len() && is_text_key_byte(bytes[index]) {
+            index += 1;
+        }
+        let key_end = index;
+        let key = &text[key_start..key_end];
+        if !is_sensitive_key(key) {
+            continue;
+        }
+
+        let mut separator = key_end;
+        if key_start > 0
+            && matches!(bytes[key_start - 1], b'"' | b'\'')
+            && bytes.get(key_end) == Some(&bytes[key_start - 1])
+        {
+            separator += 1;
+        }
+        while matches!(bytes.get(separator), Some(b' ' | b'\t')) {
+            separator += 1;
+        }
+        if !matches!(bytes.get(separator), Some(b':' | b'=')) {
+            continue;
+        }
+
+        let mut value_start = separator + 1;
+        while matches!(bytes.get(value_start), Some(b' ' | b'\t')) {
+            value_start += 1;
+        }
+        let quoted_content_start = if matches!(bytes.get(value_start), Some(b'"' | b'\'')) {
+            value_start + 1
+        } else {
+            value_start
+        };
+        if quoted_content_start >= bytes.len() {
+            index = quoted_content_start;
+            continue;
+        }
+
+        let line_wide = matches!(
+            normalized_key(key).as_str(),
+            "authorization" | "proxyauthorization"
+        );
+        let replacement_start = if line_wide {
+            value_start
+        } else {
+            quoted_content_start
+        };
+        let mut value_end = if line_wide {
+            line_value_end(text, value_start)
+        } else {
+            delimited_value_end(text, value_start)
+        };
+        if replacement_start >= value_end {
+            continue;
+        }
+
+        while value_end > replacement_start && bytes[value_end - 1].is_ascii_whitespace() {
+            value_end -= 1;
+        }
+        if is_redaction_marker_text(&text[replacement_start..value_end]) {
+            index = value_end;
+            continue;
+        }
+        output.push_str(&text[cursor..replacement_start]);
+        output.push_str(REDACTION_MARKER);
+        cursor = value_end;
+        index = value_end;
+        redacted_values = redacted_values.saturating_add(1);
+    }
+
+    output.push_str(&text[cursor..]);
+    (output, redacted_values)
+}
+
 fn redact_value(
     value: &mut Value,
     path: &str,
@@ -207,7 +352,9 @@ fn redact_value(
                 }
             }
 
-            let (sanitized, count) = sanitize_urls_in_text(text);
+            let (sanitized_urls, url_count) = sanitize_urls_in_text(text);
+            let (sanitized, credential_count) = sanitize_credentials_in_text(&sanitized_urls);
+            let count = url_count.saturating_add(credential_count);
             if count > 0 {
                 *text = sanitized;
                 *redacted_values = redacted_values.saturating_add(count);
