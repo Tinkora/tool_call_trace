@@ -40,8 +40,9 @@ display.
   findings in a keyboard-accessible waterfall.
 - Inspect untrusted input and output through text-only DOM rendering.
 - Explicitly redact common authorization, API-key, token, password, secret,
-  and private-key fields; HTTP(S) user-info, query, and fragment components;
-  and exact JSON Pointer paths.
+  and private-key fields; credential assignments and authorization headers in
+  free text; HTTP(S) user-info, query, and fragment components; and exact JSON
+  Pointer paths.
 - Preserve trace and call IDs so investigations remain searchable.
 - Validate and normalize the same contracts from files or stdin with
   `tool-call-trace check`.

@@ -8,6 +8,13 @@ Agent 开发者经常拿到 JSON 格式的工具调用日志，却缺少一个�
 并发关系、延迟、失败和重复调用。普通 JSON 查看器只能展示结构；托管式可观测平台对于
 一次性或敏感 trace 又可能过重或不适用。
 
+公开报告显示同一数据会跨越多个 trace 表面。OpenAI Agents 的
+[#4016](https://github.com/openai/openai-agents-python/issues/4016) 证明 MCP URL
+凭据会出现在错误、span 和持久化 metadata 中。Promptfoo 的
+[#10382](https://github.com/promptfoo/promptfoo/pull/10382) 记录了原始工具输入、输出、
+metadata 和错误信息绕过 trace 脱敏的情况，其中包括自由文本 authorization header
+和凭据赋值。
+
 ## 目标工作流
 
 1. 打开静态浏览器工具，或运行本地 CLI。
@@ -80,9 +87,13 @@ Anthropic message block 不提供调用开始和结束时间，因此继续明�
    `Proxy-Authorization`、`X-API-Key`、API/access/auth/bearer/refresh/session
    token 或 key 名称、client/private/secret key 名称，以及 `password`、`passwd`
    和 `token`。
-3. 其余字符串会扫描 HTTP(S) URL，移除 user-info、query 和 fragment，同时保留
+3. JSON 编码的 object/array 字符串会先解码并遍历，只在发生替换时重新序列化。
+4. 其余字符串会扫描 HTTP(S) URL，移除 user-info、query 和 fragment，同时保留
    scheme、host、port 和 path。
-4. 数组和嵌套对象会被递归遍历。
+5. 自由文本使用同一敏感 key 白名单处理明确的 `key: value` 和 `key=value` 赋值。
+   `Authorization` 与 `Proxy-Authorization` 会脱敏到该行末尾，避免凭据 scheme 后的
+   token 泄漏。
+6. 数组和嵌套对象会被递归遍历。
 
 脱敏具有幂等性，但不声称完整检测凭据或个人数据。如果已经请求脱敏但解析失败，浏览器和
 CLI 会隐藏可能包含用户值的 parser 详情；安全的 JSON Pointer 校验信息仍会显示。
@@ -107,7 +118,8 @@ CLI 会隐藏可能包含用户值的 parser 详情；安全的 JSON Pointer 校
 ## 验收证据
 
 - Rust 契约测试覆盖五种格式、时间归一化、pending/error 映射、重复 ID、资源上限、
-  配置路径、`X-API-Key`、幂等性和无 secret 的脱敏结果。
+  配置路径、`X-API-Key`、编码 JSON、自由文本凭据、幂等性、保留的非敏感上下文和
+  无 secret 的脱敏结果。
 - CLI 进程测试覆盖 stdin 和文件、显式与自动格式、退出码、JSON 输出、替换数量和无
   secret 的失败信息。
 - Chromium 测试在 375、768、1024 和 1440 像素宽度下验证编译后的 WASM，包括可再次

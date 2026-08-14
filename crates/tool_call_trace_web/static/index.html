@@ -636,7 +636,7 @@
 
           <label class="control-label" for="json-input">Tool-call log (JSON)</label>
           <textarea id="json-input" aria-describedby="redaction-status error-message" spellcheck="false" placeholder="JSON tool-call log"></textarea>
-          <button id="analyze-button" type="submit">Analyze trace</button>
+          <button id="analyze-button" type="submit" disabled>Loading...</button>
           <p id="error-message" role="alert" aria-live="assertive"></p>
         </form>
       </aside>
@@ -782,6 +782,7 @@
       }], null, 2),
     };
     samples.auto = samples.generic;
+    input.value = samples.generic;
 
     formatSelector.addEventListener("change", () => {
       input.value = samples[formatSelector.value];
@@ -1085,7 +1086,8 @@
     });
 
     await init();
-    input.value = samples.generic;
+    analyzeButton.disabled = false;
+    analyzeButton.textContent = "Analyze trace";
   </script>
 </body>
 </html>
