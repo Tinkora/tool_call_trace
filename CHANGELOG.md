@@ -6,6 +6,15 @@ All notable changes will be documented in this file. The format follows
 
 ## [Unreleased]
 
+No unreleased changes.
+
+## [0.2.1] - 2026-08-15
+
+### Fixed
+
+- Preserve a user-selected sample while the WASM runtime initializes and keep
+  analysis disabled until the runtime is ready.
+
 ### Security
 
 - Redact credentials inside JSON-encoded output strings and keep parser or
@@ -57,6 +66,7 @@ All notable changes will be documented in this file. The format follows
 - Removed fabricated Anthropic timing support and unimplemented MCP tool
   declarations.
 
-[Unreleased]: https://github.com/Tinkora/tool_call_trace/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Tinkora/tool_call_trace/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Tinkora/tool_call_trace/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Tinkora/tool_call_trace/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Tinkora/tool_call_trace/releases/tag/v0.1.0
