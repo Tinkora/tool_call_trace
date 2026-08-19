@@ -5,6 +5,7 @@ if (!/^\d{1,5}$/.test(testPort) || Number(testPort) === 0 || Number(testPort) > 
   throw new Error("PLAYWRIGHT_PORT must be an integer between 1 and 65535");
 }
 const testOrigin = `http://127.0.0.1:${testPort}`;
+const executablePath = process.env.BROWSER_EXECUTABLE_PATH;
 
 export default defineConfig({
   testDir: "./tests/browser",
@@ -16,6 +17,7 @@ export default defineConfig({
     baseURL: testOrigin,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
+    launchOptions: executablePath ? { executablePath } : {},
   },
   webServer: {
     command: `npx --no-install http-server . -a 127.0.0.1 -p ${testPort} -c-1 --silent`,

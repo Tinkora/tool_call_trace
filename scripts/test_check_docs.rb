@@ -46,6 +46,17 @@ class CheckDocsTest < Minitest::Test
     end
   end
 
+  def test_release_version_drift_in_bilingual_readme_fails
+    stale_readme = "# Chinese\n\n[English](README.md)\n\n[Release](https://github.com/Tinkora/tool_call_trace/releases/tag/v0.2.0)\n"
+    with_fixture(overrides: { "README.zh-CN.md" => stale_readme }) do |root|
+      result = run_checker(root)
+
+      refute result[:status].success?
+      assert_includes result[:output],
+                      "README.zh-CN.md does not link to the current release v0.2.1"
+    end
+  end
+
   def test_legacy_organization_reference_fails
     legacy_name = ["Agent", "Commons history\n"].join
     with_fixture(overrides: { "CHANGELOG.md" => "# #{legacy_name}" }) do |root|
@@ -95,13 +106,14 @@ class CheckDocsTest < Minitest::Test
     files = {
       "LICENSE" => "MIT License\n",
       "CHANGELOG.md" => "# Changelog\n",
-      "Cargo.toml" => "[workspace]\n",
+      "Cargo.toml" => "[workspace.package]\nversion = \"0.2.1\"\n",
       "MAINTAINERS.md" => "# Maintainers\n",
       ".github/CODEOWNERS" => "* @maintainer\n"
     }
     PAIRS.each do |english, chinese|
-      files[english] = "# English\n\n[Chinese](#{File.basename(chinese)})\n"
-      files[chinese] = "# Chinese\n\n[English](#{File.basename(english)})\n"
+      release_link = "https://github.com/Tinkora/tool_call_trace/releases/tag/v0.2.1"
+      files[english] = "# English\n\n[Chinese](#{File.basename(chinese)})\n\n[Release](#{release_link})\n"
+      files[chinese] = "# Chinese\n\n[English](#{File.basename(english)})\n\n[Release](#{release_link})\n"
     end
     files
   end

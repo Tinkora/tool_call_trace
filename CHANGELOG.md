@@ -6,7 +6,12 @@ All notable changes will be documented in this file. The format follows
 
 ## [Unreleased]
 
-No unreleased changes.
+### Fixed
+
+- Keep the Chinese README release link and status aligned with the current
+  published version.
+- Add a documentation contract check that rejects stale bilingual release
+  links when the workspace package version changes.
 
 ## [0.2.1] - 2026-08-15
 
