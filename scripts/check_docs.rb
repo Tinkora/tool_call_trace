@@ -82,6 +82,24 @@ BILINGUAL_PAIRS.each do |english, chinese|
   end
 end
 
+package_version = nil
+if tracked_files.include?("Cargo.toml") && File.file?(File.join(root, "Cargo.toml"))
+  cargo_toml = File.read(File.join(root, "Cargo.toml"), encoding: "UTF-8", invalid: :replace, undef: :replace)
+  package_version = cargo_toml[/^\s*version\s*=\s*"([^"]+)"/, 1] if cargo_toml.valid_encoding?
+end
+
+if package_version
+  release_tag = "v#{package_version}"
+  %w[README.md README.zh-CN.md].each do |path|
+    next unless tracked_files.include?(path) && File.file?(File.join(root, path))
+
+    readme = File.read(File.join(root, path), encoding: "UTF-8", invalid: :replace, undef: :replace)
+    unless readme.include?("/releases/tag/#{release_tag}")
+      errors << "#{path} does not link to the current release #{release_tag}"
+    end
+  end
+end
+
 text_files = tracked_files.select do |path|
   TEXT_EXTENSIONS.include?(File.extname(path).downcase) ||
     TEXT_FILENAMES.include?(File.basename(path))
