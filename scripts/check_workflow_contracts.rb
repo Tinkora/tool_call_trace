@@ -3,10 +3,10 @@
 require "optparse"
 require "yaml"
 
-REUSABLE_WORKFLOW_COMMIT = "e967aed0860957b24daf57e66766713c60b5bcae"
+REUSABLE_WORKFLOW_COMMIT = "ed1ae1d6e3a5f1887f415f985836bec954d1ed41"
 PAGES_MAIN_CONDITION = "github.ref == 'refs/heads/main'"
-PAGES_WASM_ARTIFACT = "wasm-package-${{ github.run_id }}-${{ github.run_attempt }}"
-PAGES_SOURCE_ARTIFACT = "pages-source-${{ github.run_id }}-${{ github.run_attempt }}"
+PAGES_WASM_ARTIFACT = "wasm-package-${{ github.run_id }}"
+PAGES_SOURCE_ARTIFACT = "pages-source-${{ github.run_id }}"
 EXPECTED_CALLS = {
   ".github/workflows/quality.yml" => {
     "rust" => "Tinkora/.github/.github/workflows/reusable-rust-quality.yml@#{REUSABLE_WORKFLOW_COMMIT}",
@@ -66,8 +66,9 @@ EXPECTED_CALLS.each do |relative_path, expected_jobs|
 
     job_values = string_values(jobs)
     unless job_values.include?(PAGES_WASM_ARTIFACT) &&
-        job_values.count(PAGES_SOURCE_ARTIFACT) >= 2
-      errors << "#{relative_path} artifact names must include github.run_attempt"
+        job_values.count(PAGES_SOURCE_ARTIFACT) >= 2 &&
+        job_values.none? { |value| value.include?("github.run_attempt") }
+      errors << "#{relative_path} artifact names must use stable github.run_id values"
     end
   rescue KeyError, Psych::Exception => error
     errors << "Invalid workflow #{relative_path}: #{error.message}"

@@ -16,7 +16,7 @@ jobs:
   audit:
     permissions:
       contents: read
-    uses: Tinkora/.github/.github/workflows/reusable-supply-chain.yml@e967aed0860957b24daf57e66766713c60b5bcae # Tinkora organization baseline
+    uses: Tinkora/.github/.github/workflows/reusable-supply-chain.yml@ed1ae1d6e3a5f1887f415f985836bec954d1ed41 # Tinkora organization baseline
     with:
       working-directory: .
       toolchain: 1.88.0

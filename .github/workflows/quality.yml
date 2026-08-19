@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   rust:
-    uses: Tinkora/.github/.github/workflows/reusable-rust-quality.yml@e967aed0860957b24daf57e66766713c60b5bcae # Tinkora organization baseline
+    uses: Tinkora/.github/.github/workflows/reusable-rust-quality.yml@ed1ae1d6e3a5f1887f415f985836bec954d1ed41 # Tinkora organization baseline
     with:
       working-directory: .
       toolchain: 1.95.0
@@ -16,7 +16,7 @@ jobs:
       msrv: 1.95.0
 
   wasm:
-    uses: Tinkora/.github/.github/workflows/reusable-wasm-quality.yml@e967aed0860957b24daf57e66766713c60b5bcae # Tinkora organization baseline
+    uses: Tinkora/.github/.github/workflows/reusable-wasm-quality.yml@ed1ae1d6e3a5f1887f415f985836bec954d1ed41 # Tinkora organization baseline
     with:
       working-directory: crates/tool_call_trace_web
       toolchain: 1.95.0

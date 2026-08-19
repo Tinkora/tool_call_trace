@@ -9,7 +9,7 @@ require "yaml"
 
 class CheckWorkflowContractsTest < Minitest::Test
   CHECKER = File.expand_path("check_workflow_contracts.rb", __dir__)
-  COMMIT = "e967aed0860957b24daf57e66766713c60b5bcae"
+  COMMIT = "ed1ae1d6e3a5f1887f415f985836bec954d1ed41"
 
   def test_valid_tinkora_references_pass
     with_fixture do |root|
@@ -65,12 +65,12 @@ class CheckWorkflowContractsTest < Minitest::Test
     end
   end
 
-  def test_pages_artifacts_include_the_run_attempt
-    with_fixture(pages_run_attempt: false) do |root|
+  def test_pages_artifacts_use_stable_run_id
+    with_fixture(pages_run_attempt: true) do |root|
       result = run_checker(root)
 
       refute result[:status].success?
-      assert_includes result[:output], "must include github.run_attempt"
+      assert_includes result[:output], "must use stable github.run_id values"
     end
   end
 
@@ -82,7 +82,7 @@ class CheckWorkflowContractsTest < Minitest::Test
     include_wasm: true,
     pages_reference: reference,
     pages_main_gate: true,
-    pages_run_attempt: true
+    pages_run_attempt: false
   )
     Dir.mktmpdir("workflow-contracts-") do |root|
       quality_jobs = {
