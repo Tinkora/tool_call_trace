@@ -655,6 +655,7 @@
         <div id="insights-bar" aria-live="polite">
           <span id="duplicate-insight"></span>
           <span id="slow-insight"></span>
+          <span id="retry-insight"></span>
         </div>
 
         <div id="legend" aria-label="Call status legend">
@@ -707,6 +708,7 @@
     const insightsBar = document.getElementById("insights-bar");
     const duplicateInsight = document.getElementById("duplicate-insight");
     const slowInsight = document.getElementById("slow-insight");
+    const retryInsight = document.getElementById("retry-insight");
     const detailDialog = document.getElementById("detail-dialog");
     const detailBody = document.getElementById("detail-body");
     const detailTitle = document.getElementById("detail-title");
@@ -976,12 +978,16 @@
         0,
       );
       const slowCount = currentAnalysis.slow_calls.length;
+      const retryCount = currentAnalysis.retry_loop_findings.length;
       duplicateInsight.textContent = duplicateCount > 0
         ? `${duplicateCount} repeated call${duplicateCount === 1 ? "" : "s"}`
         : "No repeated calls";
       slowInsight.textContent = slowCount > 0
         ? `${slowCount} call${slowCount === 1 ? "" : "s"} over 5,000ms`
         : "No calls over 5,000ms";
+      retryInsight.textContent = retryCount > 0
+        ? `${retryCount} retry loop${retryCount === 1 ? "" : "s"}`
+        : "No retry loops";
       insightsBar.classList.add("visible");
     }
 

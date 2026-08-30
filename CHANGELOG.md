@@ -6,6 +6,19 @@ All notable changes will be documented in this file. The format follows
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-08-31
+
+### Added
+
+- Detect sequential retry loops, recovered retries, and aggregated overlapping
+  duplicate calls in the browser analysis and CLI JSON report.
+- Bound finding call IDs while preserving complete group counts.
+
+### Fixed
+
+- Analyze call identity before optional redaction so distinct secret-bearing
+  inputs cannot be merged into a false retry finding.
+
 ### Fixed
 
 - Keep the Chinese README release link and status aligned with the current
@@ -71,7 +84,8 @@ All notable changes will be documented in this file. The format follows
 - Removed fabricated Anthropic timing support and unimplemented MCP tool
   declarations.
 
-[Unreleased]: https://github.com/Tinkora/tool_call_trace/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Tinkora/tool_call_trace/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/Tinkora/tool_call_trace/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Tinkora/tool_call_trace/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Tinkora/tool_call_trace/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Tinkora/tool_call_trace/releases/tag/v0.1.0

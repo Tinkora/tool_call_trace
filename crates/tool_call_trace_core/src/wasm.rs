@@ -70,6 +70,25 @@ mod tests {
         assert_eq!(analysis["total_calls"].as_u64().unwrap(), 2);
         assert_eq!(analysis["error_count"].as_u64().unwrap(), 0);
         assert_eq!(analysis["total_time_ms"].as_u64().unwrap(), 300);
+        assert!(analysis["retry_loop_findings"].is_array());
+    }
+
+    #[test]
+    fn analyze_json_exposes_retry_findings_without_input_values() {
+        let input = r#"[
+            {"id":"1","name":"search","input":{"query":"private"},"start_time_ms":0,"end_time_ms":10,"status":"error"},
+            {"id":"2","name":"search","input":{"query":"private"},"start_time_ms":10,"end_time_ms":20,"status":"error"},
+            {"id":"3","name":"search","input":{"query":"private"},"start_time_ms":20,"end_time_ms":30,"status":"error"}
+        ]"#;
+        let log_json = parse_generic_array_json(input).unwrap();
+        let analysis_json = analyze_json(&log_json, None).unwrap();
+        let analysis: serde_json::Value = serde_json::from_str(&analysis_json).unwrap();
+
+        assert_eq!(
+            analysis["retry_loop_findings"][0]["kind"],
+            "consecutive_failures"
+        );
+        assert!(!analysis_json.contains("private"));
     }
 
     #[test]

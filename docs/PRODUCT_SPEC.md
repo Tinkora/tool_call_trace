@@ -26,7 +26,22 @@ assignments.
 4. Paste or pipe a timestamped trace and analyze it locally.
 5. Compare call position and duration on the waterfall.
 6. Inspect redacted input, output, status, and error values.
-7. Review aggregate latency, error rate, duplicates, and slow calls.
+7. Review aggregate latency, error rate, duplicates, slow calls, and retry loops.
+
+## Retry analysis contract
+
+- A retry loop requires at least three identical failed calls in temporal
+  sequence; every next call starts at or after the previous call ends.
+- An identical success immediately after that sequence changes the finding to
+  `recovered_retry_loop`.
+- Calls with overlapping time ranges are aggregated into one
+  `overlapping_duplicate` group rather than classified as retries.
+- Identity uses a trimmed, case-normalized tool name and canonical JSON input.
+- Findings retain the complete `call_count` but at most 20 call IDs, with
+  `call_ids_truncated` indicating omitted IDs.
+- Identity analysis runs on the parsed source before optional redaction.
+  Findings do not copy input or error values. Tool names and call IDs remain
+  user-controlled identifiers and are not claimed to be secret-free.
 
 ## Input contracts
 

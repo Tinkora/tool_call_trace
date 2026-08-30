@@ -16,15 +16,14 @@
 
 [打开浏览器工具](https://tinkora.github.io/tool_call_trace/)
 
-[下载 v0.2.1 及验证资产](https://github.com/Tinkora/tool_call_trace/releases/tag/v0.2.1)
+[下载 v0.2.2 及验证资产](https://github.com/Tinkora/tool_call_trace/releases/tag/v0.2.2)
 
 Tool Call Trace 是一个在浏览器本地运行的 AI Agent 工具调用瀑布流查看器和契约检查器。
 它可以导入 Generic JSON、OpenAI run steps、OpenAI Agents SDK span、LangChain Run
 和 PydanticAI/Logfire span，并且不会上传 trace。显式开启脱敏后，常见凭据和指定字段会
 在分析或显示前被替换。
 
-> 状态：预发布成熟度。`v0.2.1` 加固 JSON 编码字符串和自由文本凭据脱敏，并修复 WASM
-> 启动就绪状态；
+> 状态：预发布成熟度。`v0.2.2` 新增有界的重试循环和重叠重复调用诊断。
 > 当前没有发布 Package 或 Agent transport。
 
 ## 当前能力
@@ -32,7 +31,7 @@ Tool Call Trace 是一个在浏览器本地运行的 AI Agent 工具调用瀑布
 - 自动检测或显式解析五种带时间戳的 trace 契约。
 - 将绝对时间或 exporter 时间戳归一化为相对 trace 起点的毫秒数。
 - 在支持键盘操作的瀑布流中展示总耗时、平均耗时、最大耗时、错误率、调用频率、
-  重复调用和慢调用。
+  重复调用、慢调用和重试循环诊断。
 - 只通过纯文本 DOM 节点呈现不可信的输入和输出。
 - 显式脱敏常见 authorization、API key、token、password、secret 和 private key 字段，
   自由文本中的凭据赋值和 authorization header、HTTP(S) URL 的 user-info、query、
@@ -40,6 +39,17 @@ Tool Call Trace 是一个在浏览器本地运行的 AI Agent 工具调用瀑布
 - 保留 trace ID 和 call ID，确保排查过程仍可搜索。
 - 通过 `tool-call-trace check` 从文件或 stdin 校验并归一化相同契约。
 - 拒绝超过 5 MiB 或 100,000 行的输入，以及超过 2,000 次调用的 trace。
+
+## 重试循环诊断
+
+只有至少三次相同失败调用按顺序执行时才报告重试循环：每次尝试必须在上一次结束后
+开始。其后紧接的相同成功调用会将循环标为已恢复。时间区间重叠的相同调用会聚合成
+一个重叠组，而不会被当成重试。finding 最多保留 20 个调用 ID，`call_count` 仍记录
+完整组大小。
+
+调用身份由去除首尾空白并统一大小写的工具名和 canonical JSON 输入决定。分析发生在
+可选脱敏之前，避免不同凭据被替换后错误合并。finding 不复制 input 或 error 值，但
+工具名和调用 ID 仍是用户控制的标识符，可能包含敏感信息。
 
 ## 支持的输入
 

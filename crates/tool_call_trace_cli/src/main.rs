@@ -195,6 +195,7 @@ fn execute(options: Options) -> Result<(), CliError> {
             CliError::contract(error)
         }
     })?;
+    let retry_loop_findings = find_retry_loop_findings(&log);
     let RedactionOutcome {
         log,
         redacted_values,
@@ -213,7 +214,6 @@ fn execute(options: Options) -> Result<(), CliError> {
         }
     };
     let total_calls = log.total_calls;
-    let retry_loop_findings = find_retry_loop_findings(&log);
     let report = ContractReport {
         valid: true,
         redacted_values,

@@ -161,3 +161,22 @@ fn reports_retry_loop_findings_without_input_or_error_values() {
     assert!(!finding.contains("SECRET_INPUT"));
     assert!(!finding.contains("SECRET_ERROR"));
 }
+
+#[test]
+fn redaction_does_not_merge_distinct_inputs_into_a_retry_loop() {
+    let input = r#"[
+      {"id":"1","name":"fetch","input":{"token":"SECRET_A"},"start_time_ms":0,"end_time_ms":10,"status":"error"},
+      {"id":"2","name":"fetch","input":{"token":"SECRET_B"},"start_time_ms":10,"end_time_ms":20,"status":"error"},
+      {"id":"3","name":"fetch","input":{"token":"SECRET_C"},"start_time_ms":20,"end_time_ms":30,"status":"error"}
+    ]"#;
+
+    let output = run_cli(&["check", "--format", "generic", "--redact", "-"], input);
+
+    assert!(output.status.success());
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["retry_loop_findings"], serde_json::json!([]));
+    let rendered = String::from_utf8_lossy(&output.stdout);
+    assert!(!rendered.contains("SECRET_A"));
+    assert!(!rendered.contains("SECRET_B"));
+    assert!(!rendered.contains("SECRET_C"));
+}

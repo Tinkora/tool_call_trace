@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 const DEFAULT_RETRY_FAILURE_THRESHOLD: usize = 3;
+const MAX_FINDING_CALL_IDS: usize = 20;
 
 /// A retry-related pattern found without exposing tool input or error values.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -11,6 +12,7 @@ pub struct RetryLoopFinding {
     pub tool_name: String,
     pub call_count: u32,
     pub call_ids: Vec<String>,
+    pub call_ids_truncated: bool,
     pub message: String,
 }
 
@@ -27,6 +29,13 @@ pub enum RetryFindingKind {
 struct CanonicalCallKey {
     tool_name: String,
     input: String,
+}
+
+struct OverlapGroup {
+    first_index: usize,
+    max_end_time_ms: u64,
+    call_count: u32,
+    call_ids: Vec<String>,
 }
 
 fn canonical_call_key(call: &ToolCall) -> CanonicalCallKey {
@@ -79,10 +88,14 @@ pub fn find_retry_loop_findings(log: &ToolCallLog) -> Vec<RetryLoopFinding> {
         }
         let key = canonical_call_key(&calls[index]);
         let start = index;
+        let mut previous_end_time_ms = calls[index].end_time_ms;
+        index += 1;
         while index < calls.len()
             && calls[index].status == crate::parse::CallStatus::Error
             && canonical_call_key(&calls[index]) == key
+            && calls[index].start_time_ms >= previous_end_time_ms
         {
+            previous_end_time_ms = calls[index].end_time_ms;
             index += 1;
         }
         let failure_count = index - start;
@@ -92,7 +105,8 @@ pub fn find_retry_loop_findings(log: &ToolCallLog) -> Vec<RetryLoopFinding> {
 
         let recovered = index < calls.len()
             && calls[index].status == crate::parse::CallStatus::Success
-            && canonical_call_key(&calls[index]) == key;
+            && canonical_call_key(&calls[index]) == key
+            && calls[index].start_time_ms >= previous_end_time_ms;
         let end = index + usize::from(recovered);
         let kind = if recovered {
             RetryFindingKind::RecoveredRetryLoop
@@ -105,8 +119,10 @@ pub fn find_retry_loop_findings(log: &ToolCallLog) -> Vec<RetryLoopFinding> {
             call_count: (end - start) as u32,
             call_ids: calls[start..end]
                 .iter()
+                .take(MAX_FINDING_CALL_IDS)
                 .map(|call| call.id.clone())
                 .collect(),
+            call_ids_truncated: end - start > MAX_FINDING_CALL_IDS,
             message: if recovered {
                 format!("Repeated failures recovered after {failure_count} attempts")
             } else {
@@ -118,31 +134,57 @@ pub fn find_retry_loop_findings(log: &ToolCallLog) -> Vec<RetryLoopFinding> {
         }
     }
 
-    let mut active: HashMap<CanonicalCallKey, Vec<&ToolCall>> = HashMap::new();
-    for call in calls {
+    let mut active: HashMap<CanonicalCallKey, OverlapGroup> = HashMap::new();
+    let mut overlap_findings = Vec::new();
+    for (call_index, call) in calls.iter().enumerate() {
         let key = canonical_call_key(call);
-        let overlapping: Vec<_> = active
-            .entry(key.clone())
-            .or_default()
-            .iter()
-            .copied()
-            .filter(|previous| previous.end_time_ms > call.start_time_ms)
-            .collect();
-        for previous in overlapping {
-            findings.push(RetryLoopFinding {
-                kind: RetryFindingKind::OverlappingDuplicate,
-                tool_name: key.tool_name.clone(),
-                call_count: 2,
-                call_ids: vec![previous.id.clone(), call.id.clone()],
-                message: "Identical tool calls overlap in time".into(),
-            });
+        if let Some(group) = active.get_mut(&key) {
+            if call.start_time_ms < group.max_end_time_ms {
+                group.call_count += 1;
+                group.max_end_time_ms = group.max_end_time_ms.max(call.end_time_ms);
+                if group.call_ids.len() < MAX_FINDING_CALL_IDS {
+                    group.call_ids.push(call.id.clone());
+                }
+                continue;
+            }
+            if group.call_count > 1 {
+                overlap_findings.push(overlap_finding(&key, group));
+            }
         }
-        let same_key = active.entry(key).or_default();
-        same_key.retain(|previous| previous.end_time_ms > call.start_time_ms);
-        same_key.push(call);
+        active.insert(
+            key,
+            OverlapGroup {
+                first_index: call_index,
+                max_end_time_ms: call.end_time_ms,
+                call_count: 1,
+                call_ids: vec![call.id.clone()],
+            },
+        );
     }
+    overlap_findings.extend(
+        active
+            .iter()
+            .filter(|(_, group)| group.call_count > 1)
+            .map(|(key, group)| overlap_finding(key, group)),
+    );
+    overlap_findings.sort_by_key(|(first_index, _)| *first_index);
+    findings.extend(overlap_findings.into_iter().map(|(_, finding)| finding));
 
     findings
+}
+
+fn overlap_finding(key: &CanonicalCallKey, group: &OverlapGroup) -> (usize, RetryLoopFinding) {
+    (
+        group.first_index,
+        RetryLoopFinding {
+            kind: RetryFindingKind::OverlappingDuplicate,
+            tool_name: key.tool_name.clone(),
+            call_count: group.call_count,
+            call_ids: group.call_ids.clone(),
+            call_ids_truncated: group.call_count as usize > group.call_ids.len(),
+            message: "Identical tool calls overlap in time".into(),
+        },
+    )
 }
 
 /// Statistical analysis of a tool-call trace.
@@ -274,12 +316,13 @@ pub fn find_slow_calls(log: &ToolCallLog, threshold_ms: u64) -> Vec<&ToolCall> {
         .collect()
 }
 
-/// Full analysis including duplicates and slow calls, serializable for WASM.
+/// Full analysis including duplicates, slow calls, and retry findings, serializable for WASM.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FullAnalysis {
     pub stats: TraceAnalysis,
     pub duplicate_calls: Vec<(String, u32)>,
     pub slow_calls: Vec<SlowCallInfo>,
+    pub retry_loop_findings: Vec<RetryLoopFinding>,
     pub total_calls: u32,
     pub error_count: u32,
     pub total_time_ms: u64,
@@ -317,6 +360,7 @@ pub fn full_analyze(log: &ToolCallLog, slow_threshold_ms: Option<u64>) -> FullAn
                 },
             })
             .collect(),
+        retry_loop_findings: find_retry_loop_findings(log),
         total_calls: log.total_calls,
         error_count: log.error_count,
         total_time_ms: log.total_time_ms,
@@ -588,6 +632,58 @@ mod tests {
         assert_eq!(findings[0].kind, RetryFindingKind::OverlappingDuplicate);
         assert_eq!(findings[0].call_ids, ["1", "2"]);
         assert!(!findings[0].message.contains("/private/file"));
+    }
+
+    #[test]
+    fn concurrent_failures_are_not_misclassified_as_retries() {
+        let input = serde_json::json!({"query": "same"});
+        let log = ToolCallLog {
+            trace_id: "concurrent-errors".into(),
+            calls: vec![
+                retry_call("1", "search", input.clone(), CallStatus::Error, 0, 30),
+                retry_call("2", "search", input.clone(), CallStatus::Error, 10, 40),
+                retry_call("3", "search", input, CallStatus::Error, 20, 50),
+            ],
+            total_time_ms: 50,
+            total_calls: 3,
+            error_count: 3,
+        };
+
+        let findings = find_retry_loop_findings(&log);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].kind, RetryFindingKind::OverlappingDuplicate);
+        assert_eq!(findings[0].call_count, 3);
+    }
+
+    #[test]
+    fn aggregates_large_overlap_groups_with_bounded_ids() {
+        let calls = (0..2_000)
+            .map(|index| {
+                retry_call(
+                    &format!("call_{index}"),
+                    "search",
+                    serde_json::json!({"query": "same"}),
+                    CallStatus::Success,
+                    index,
+                    10_000,
+                )
+            })
+            .collect();
+        let log = ToolCallLog {
+            trace_id: "large-overlap".into(),
+            calls,
+            total_time_ms: 10_000,
+            total_calls: 2_000,
+            error_count: 0,
+        };
+
+        let findings = find_retry_loop_findings(&log);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].call_count, 2_000);
+        assert_eq!(findings[0].call_ids.len(), 20);
+        assert!(findings[0].call_ids_truncated);
     }
 
     #[test]
