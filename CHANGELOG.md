@@ -18,9 +18,6 @@ All notable changes will be documented in this file. The format follows
 
 - Analyze call identity before optional redaction so distinct secret-bearing
   inputs cannot be merged into a false retry finding.
-
-### Fixed
-
 - Keep the Chinese README release link and status aligned with the current
   published version.
 - Add a documentation contract check that rejects stale bilingual release
