@@ -88,11 +88,29 @@ test("analyzes the default trace and exposes the real findings", async ({ page }
   await expect(page.locator("#stat-total-time")).toHaveText("4650");
   await expect(page.locator("#stat-error-rate")).toHaveText("11%");
   await expect(page.getByText("2 repeated calls", { exact: true })).toBeVisible();
+  await expect(page.getByText("No retry loops", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("button", {
       name: "search, success, starts at 0 milliseconds, duration 120 milliseconds",
     }),
   ).toBeVisible();
+});
+
+test("shows retry loop findings without exposing tool input", async ({ page }) => {
+  await page.goto("/static/");
+  const calls = [0, 1, 2].map((index) => ({
+    id: `retry_${index}`,
+    name: "search",
+    input: { query: "private-query" },
+    start_time_ms: index * 10,
+    end_time_ms: (index + 1) * 10,
+    status: "error",
+  }));
+  await page.getByLabel("Tool-call log (JSON)").fill(JSON.stringify(calls));
+  await page.getByRole("button", { name: "Analyze trace" }).click();
+
+  await expect(page.getByText("1 retry loop", { exact: true })).toBeVisible();
+  await expect(page.locator("#insights-bar")).not.toContainText("private-query");
 });
 
 test("uses OpenAI terminal timestamps and preserves function output", async ({ page }) => {

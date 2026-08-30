@@ -2,6 +2,191 @@ use crate::parse::{ToolCall, ToolCallLog};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+const DEFAULT_RETRY_FAILURE_THRESHOLD: usize = 3;
+const MAX_FINDING_CALL_IDS: usize = 20;
+
+/// A retry-related pattern found without exposing tool input or error values.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RetryLoopFinding {
+    pub kind: RetryFindingKind,
+    pub tool_name: String,
+    pub call_count: u32,
+    pub call_ids: Vec<String>,
+    pub call_ids_truncated: bool,
+    pub message: String,
+}
+
+/// Stable machine-readable categories for retry-related findings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RetryFindingKind {
+    ConsecutiveFailures,
+    RecoveredRetryLoop,
+    OverlappingDuplicate,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct CanonicalCallKey {
+    tool_name: String,
+    input: String,
+}
+
+struct OverlapGroup {
+    first_index: usize,
+    max_end_time_ms: u64,
+    call_count: u32,
+    call_ids: Vec<String>,
+}
+
+fn canonical_call_key(call: &ToolCall) -> CanonicalCallKey {
+    CanonicalCallKey {
+        tool_name: call.name.trim().to_lowercase(),
+        input: canonical_json(&call.input),
+    }
+}
+
+fn canonical_json(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut entries: Vec<_> = map.iter().collect();
+            entries.sort_by_key(|(key, _)| *key);
+            let body = entries
+                .into_iter()
+                .map(|(key, value)| {
+                    format!(
+                        "{}:{}",
+                        serde_json::to_string(key).unwrap_or_default(),
+                        canonical_json(value)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("{{{body}}}")
+        }
+        serde_json::Value::Array(values) => {
+            let body = values
+                .iter()
+                .map(canonical_json)
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("[{body}]")
+        }
+        _ => serde_json::to_string(value).unwrap_or_default(),
+    }
+}
+
+/// Detect retry loops and concurrent duplicate executions using a fixed threshold of three errors.
+pub fn find_retry_loop_findings(log: &ToolCallLog) -> Vec<RetryLoopFinding> {
+    let mut findings = Vec::new();
+    let calls = &log.calls;
+    let mut index = 0;
+
+    while index < calls.len() {
+        if calls[index].status != crate::parse::CallStatus::Error {
+            index += 1;
+            continue;
+        }
+        let key = canonical_call_key(&calls[index]);
+        let start = index;
+        let mut previous_end_time_ms = calls[index].end_time_ms;
+        index += 1;
+        while index < calls.len()
+            && calls[index].status == crate::parse::CallStatus::Error
+            && canonical_call_key(&calls[index]) == key
+            && calls[index].start_time_ms >= previous_end_time_ms
+        {
+            previous_end_time_ms = calls[index].end_time_ms;
+            index += 1;
+        }
+        let failure_count = index - start;
+        if failure_count < DEFAULT_RETRY_FAILURE_THRESHOLD {
+            continue;
+        }
+
+        let recovered = index < calls.len()
+            && calls[index].status == crate::parse::CallStatus::Success
+            && canonical_call_key(&calls[index]) == key
+            && calls[index].start_time_ms >= previous_end_time_ms;
+        let end = index + usize::from(recovered);
+        let kind = if recovered {
+            RetryFindingKind::RecoveredRetryLoop
+        } else {
+            RetryFindingKind::ConsecutiveFailures
+        };
+        findings.push(RetryLoopFinding {
+            kind,
+            tool_name: key.tool_name,
+            call_count: (end - start) as u32,
+            call_ids: calls[start..end]
+                .iter()
+                .take(MAX_FINDING_CALL_IDS)
+                .map(|call| call.id.clone())
+                .collect(),
+            call_ids_truncated: end - start > MAX_FINDING_CALL_IDS,
+            message: if recovered {
+                format!("Repeated failures recovered after {failure_count} attempts")
+            } else {
+                format!("Detected {failure_count} consecutive failed attempts")
+            },
+        });
+        if recovered {
+            index += 1;
+        }
+    }
+
+    let mut active: HashMap<CanonicalCallKey, OverlapGroup> = HashMap::new();
+    let mut overlap_findings = Vec::new();
+    for (call_index, call) in calls.iter().enumerate() {
+        let key = canonical_call_key(call);
+        if let Some(group) = active.get_mut(&key) {
+            if call.start_time_ms < group.max_end_time_ms {
+                group.call_count += 1;
+                group.max_end_time_ms = group.max_end_time_ms.max(call.end_time_ms);
+                if group.call_ids.len() < MAX_FINDING_CALL_IDS {
+                    group.call_ids.push(call.id.clone());
+                }
+                continue;
+            }
+            if group.call_count > 1 {
+                overlap_findings.push(overlap_finding(&key, group));
+            }
+        }
+        active.insert(
+            key,
+            OverlapGroup {
+                first_index: call_index,
+                max_end_time_ms: call.end_time_ms,
+                call_count: 1,
+                call_ids: vec![call.id.clone()],
+            },
+        );
+    }
+    overlap_findings.extend(
+        active
+            .iter()
+            .filter(|(_, group)| group.call_count > 1)
+            .map(|(key, group)| overlap_finding(key, group)),
+    );
+    overlap_findings.sort_by_key(|(first_index, _)| *first_index);
+    findings.extend(overlap_findings.into_iter().map(|(_, finding)| finding));
+
+    findings
+}
+
+fn overlap_finding(key: &CanonicalCallKey, group: &OverlapGroup) -> (usize, RetryLoopFinding) {
+    (
+        group.first_index,
+        RetryLoopFinding {
+            kind: RetryFindingKind::OverlappingDuplicate,
+            tool_name: key.tool_name.clone(),
+            call_count: group.call_count,
+            call_ids: group.call_ids.clone(),
+            call_ids_truncated: group.call_count as usize > group.call_ids.len(),
+            message: "Identical tool calls overlap in time".into(),
+        },
+    )
+}
+
 /// Statistical analysis of a tool-call trace.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TraceAnalysis {
@@ -131,12 +316,13 @@ pub fn find_slow_calls(log: &ToolCallLog, threshold_ms: u64) -> Vec<&ToolCall> {
         .collect()
 }
 
-/// Full analysis including duplicates and slow calls, serializable for WASM.
+/// Full analysis including duplicates, slow calls, and retry findings, serializable for WASM.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FullAnalysis {
     pub stats: TraceAnalysis,
     pub duplicate_calls: Vec<(String, u32)>,
     pub slow_calls: Vec<SlowCallInfo>,
+    pub retry_loop_findings: Vec<RetryLoopFinding>,
     pub total_calls: u32,
     pub error_count: u32,
     pub total_time_ms: u64,
@@ -174,6 +360,7 @@ pub fn full_analyze(log: &ToolCallLog, slow_threshold_ms: Option<u64>) -> FullAn
                 },
             })
             .collect(),
+        retry_loop_findings: find_retry_loop_findings(log),
         total_calls: log.total_calls,
         error_count: log.error_count,
         total_time_ms: log.total_time_ms,
@@ -356,5 +543,194 @@ mod tests {
         let analysis = analyze(&log);
 
         assert_eq!(analysis.avg_duration_ms, u64::MAX as f64);
+    }
+
+    fn retry_call(
+        id: &str,
+        name: &str,
+        input: serde_json::Value,
+        status: CallStatus,
+        start_time_ms: u64,
+        end_time_ms: u64,
+    ) -> ToolCall {
+        ToolCall {
+            id: id.into(),
+            name: name.into(),
+            input,
+            output: None,
+            error: (status == CallStatus::Error).then(|| "sensitive upstream detail".into()),
+            start_time_ms,
+            end_time_ms,
+            duration_ms: end_time_ms - start_time_ms,
+            status,
+        }
+    }
+
+    #[test]
+    fn detects_three_consecutive_failures_with_canonical_name_and_input() {
+        let log = ToolCallLog {
+            trace_id: "retry-loop".into(),
+            calls: vec![
+                retry_call(
+                    "1",
+                    " Search ",
+                    serde_json::json!({"limit": 10, "query": "private"}),
+                    CallStatus::Error,
+                    0,
+                    10,
+                ),
+                retry_call(
+                    "2",
+                    "search",
+                    serde_json::json!({"query": "private", "limit": 10}),
+                    CallStatus::Error,
+                    10,
+                    20,
+                ),
+                retry_call(
+                    "3",
+                    "SEARCH",
+                    serde_json::json!({"limit": 10, "query": "private"}),
+                    CallStatus::Error,
+                    20,
+                    30,
+                ),
+            ],
+            total_time_ms: 30,
+            total_calls: 3,
+            error_count: 3,
+        };
+
+        let findings = find_retry_loop_findings(&log);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].kind, RetryFindingKind::ConsecutiveFailures);
+        assert_eq!(findings[0].tool_name, "search");
+        assert_eq!(findings[0].call_count, 3);
+        assert_eq!(findings[0].call_ids, ["1", "2", "3"]);
+        assert!(!findings[0].message.contains("private"));
+        assert!(!findings[0].message.contains("sensitive upstream detail"));
+    }
+
+    #[test]
+    fn detects_overlapping_duplicate_calls() {
+        let input = serde_json::json!({"path": "/private/file"});
+        let log = ToolCallLog {
+            trace_id: "overlap".into(),
+            calls: vec![
+                retry_call("1", "read_file", input.clone(), CallStatus::Success, 0, 20),
+                retry_call("2", "read_file", input, CallStatus::Success, 10, 30),
+            ],
+            total_time_ms: 30,
+            total_calls: 2,
+            error_count: 0,
+        };
+
+        let findings = find_retry_loop_findings(&log);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].kind, RetryFindingKind::OverlappingDuplicate);
+        assert_eq!(findings[0].call_ids, ["1", "2"]);
+        assert!(!findings[0].message.contains("/private/file"));
+    }
+
+    #[test]
+    fn concurrent_failures_are_not_misclassified_as_retries() {
+        let input = serde_json::json!({"query": "same"});
+        let log = ToolCallLog {
+            trace_id: "concurrent-errors".into(),
+            calls: vec![
+                retry_call("1", "search", input.clone(), CallStatus::Error, 0, 30),
+                retry_call("2", "search", input.clone(), CallStatus::Error, 10, 40),
+                retry_call("3", "search", input, CallStatus::Error, 20, 50),
+            ],
+            total_time_ms: 50,
+            total_calls: 3,
+            error_count: 3,
+        };
+
+        let findings = find_retry_loop_findings(&log);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].kind, RetryFindingKind::OverlappingDuplicate);
+        assert_eq!(findings[0].call_count, 3);
+    }
+
+    #[test]
+    fn aggregates_large_overlap_groups_with_bounded_ids() {
+        let calls = (0..2_000)
+            .map(|index| {
+                retry_call(
+                    &format!("call_{index}"),
+                    "search",
+                    serde_json::json!({"query": "same"}),
+                    CallStatus::Success,
+                    index,
+                    10_000,
+                )
+            })
+            .collect();
+        let log = ToolCallLog {
+            trace_id: "large-overlap".into(),
+            calls,
+            total_time_ms: 10_000,
+            total_calls: 2_000,
+            error_count: 0,
+        };
+
+        let findings = find_retry_loop_findings(&log);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].call_count, 2_000);
+        assert_eq!(findings[0].call_ids.len(), 20);
+        assert!(findings[0].call_ids_truncated);
+    }
+
+    #[test]
+    fn reports_recovery_after_repeated_failures_but_not_repeated_successes() {
+        let input = serde_json::json!({"query": "same"});
+        let log = ToolCallLog {
+            trace_id: "recovered".into(),
+            calls: vec![
+                retry_call("1", "search", input.clone(), CallStatus::Error, 0, 10),
+                retry_call("2", "search", input.clone(), CallStatus::Error, 10, 20),
+                retry_call("3", "search", input.clone(), CallStatus::Error, 20, 30),
+                retry_call("4", "search", input.clone(), CallStatus::Success, 30, 40),
+                retry_call(
+                    "5",
+                    "other",
+                    serde_json::json!({}),
+                    CallStatus::Success,
+                    40,
+                    50,
+                ),
+                retry_call(
+                    "6",
+                    "other",
+                    serde_json::json!({}),
+                    CallStatus::Success,
+                    50,
+                    60,
+                ),
+                retry_call(
+                    "7",
+                    "other",
+                    serde_json::json!({}),
+                    CallStatus::Success,
+                    60,
+                    70,
+                ),
+            ],
+            total_time_ms: 70,
+            total_calls: 7,
+            error_count: 3,
+        };
+
+        let findings = find_retry_loop_findings(&log);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].kind, RetryFindingKind::RecoveredRetryLoop);
+        assert_eq!(findings[0].call_count, 4);
+        assert_eq!(findings[0].call_ids, ["1", "2", "3", "4"]);
     }
 }

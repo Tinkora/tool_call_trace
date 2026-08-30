@@ -7,7 +7,7 @@ tool calls with a local contract-checking CLI. It accepts strict Generic JSON,
 OpenAI run steps, OpenAI Agents spans, LangChain Runs, and PydanticAI/Logfire
 spans. Do not claim Anthropic timing support, a hosted service, an MCP server,
 an executable Agent tool, exhaustive redaction, or a package release.
-Redaction is explicit and best-effort. `v0.2.1` is the current static browser
+Redaction is explicit and best-effort. `v0.2.2` is the current static browser
 and CLI release.
 
 ## Architecture
@@ -27,8 +27,8 @@ Key files:
 - `crates/tool_call_trace_core/src/import.rs`: timestamped Agent SDK importers
   and structural auto-detection.
 - `crates/tool_call_trace_core/src/redact.rs`: opt-in normalized-log redaction.
-- `crates/tool_call_trace_core/src/analyze.rs`: aggregate, duplicate, and slow
-  call analysis.
+- `crates/tool_call_trace_core/src/analyze.rs`: aggregate, duplicate, slow-call,
+  and bounded retry-loop analysis.
 - `crates/tool_call_trace_cli/src/main.rs`: local contract-checking CLI.
 - `crates/tool_call_trace_web/src/lib.rs`: JavaScript-compatible WASM boundary.
 - `crates/tool_call_trace_web/static/index.html`: the actual product UI.

@@ -4,9 +4,9 @@ use std::io::{self, Read, Write};
 use std::process::ExitCode;
 use tool_call_trace_core::parse::MAX_INPUT_BYTES;
 use tool_call_trace_core::{
-    CoreError, RedactionConfig, RedactionOutcome, ToolCallLog, parse_agent_trace,
-    parse_generic_array, parse_langchain_format, parse_openai_agents_format, parse_openai_format,
-    parse_pydantic_ai_logfire_format, redact_log,
+    CoreError, RedactionConfig, RedactionOutcome, ToolCallLog, find_retry_loop_findings,
+    parse_agent_trace, parse_generic_array, parse_langchain_format, parse_openai_agents_format,
+    parse_openai_format, parse_pydantic_ai_logfire_format, redact_log,
 };
 
 const USAGE: &str = "Usage: tool-call-trace check [--format FORMAT] [--redact] [--redact-path POINTER] [FILE|-]\n\nFormats: auto, generic, openai-run-steps, openai-agents, langchain, pydantic-ai";
@@ -84,6 +84,7 @@ impl CliError {
 struct ContractReport {
     valid: bool,
     redacted_values: u32,
+    retry_loop_findings: Vec<tool_call_trace_core::RetryLoopFinding>,
     log: ToolCallLog,
 }
 
@@ -194,6 +195,7 @@ fn execute(options: Options) -> Result<(), CliError> {
             CliError::contract(error)
         }
     })?;
+    let retry_loop_findings = find_retry_loop_findings(&log);
     let RedactionOutcome {
         log,
         redacted_values,
@@ -215,6 +217,7 @@ fn execute(options: Options) -> Result<(), CliError> {
     let report = ContractReport {
         valid: true,
         redacted_values,
+        retry_loop_findings,
         log,
     };
 

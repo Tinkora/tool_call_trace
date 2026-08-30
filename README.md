@@ -20,7 +20,7 @@
 
 [Open the browser tool](https://tinkora.github.io/tool_call_trace/)
 
-[Download v0.2.1 and verification assets](https://github.com/Tinkora/tool_call_trace/releases/tag/v0.2.1)
+[Download v0.2.2 and verification assets](https://github.com/Tinkora/tool_call_trace/releases/tag/v0.2.2)
 
 A browser-local waterfall viewer and contract checker for timestamped AI Agent
 tool calls. It imports Generic JSON, OpenAI run steps, OpenAI Agents SDK spans,
@@ -28,16 +28,15 @@ LangChain Runs, and PydanticAI/Logfire spans without uploading the trace. Opt-in
 redaction removes common credentials and selected fields before analysis or
 display.
 
-> Status: pre-release maturity. `v0.2.1` hardens JSON-encoded and free-text
-> credential redaction and fixes WASM startup readiness. No package or Agent
-> transport is published.
+> Status: pre-release maturity. `v0.2.2` adds bounded retry-loop and overlapping
+> duplicate findings. No package or Agent transport is published.
 
 ## Current capabilities
 
 - Auto-detect or explicitly parse five timestamped trace contracts.
 - Normalize absolute or exporter timestamps to milliseconds from trace start.
-- Show total, average, maximum, error-rate, frequency, duplicate, and slow-call
-  findings in a keyboard-accessible waterfall.
+- Show total, average, maximum, error-rate, frequency, duplicate, slow-call, and
+  retry-loop findings in a keyboard-accessible waterfall.
 - Inspect untrusted input and output through text-only DOM rendering.
 - Explicitly redact common authorization, API-key, token, password, secret,
   and private-key fields; credential assignments and authorization headers in
@@ -47,6 +46,20 @@ display.
 - Validate and normalize the same contracts from files or stdin with
   `tool-call-trace check`.
 - Reject input above 5 MiB or 100,000 lines and traces above 2,000 calls.
+
+## Retry-loop findings
+
+The analyzer reports a retry loop only when at least three identical failed
+calls run sequentially: each attempt starts after the preceding attempt ends.
+An identical success immediately afterward marks the loop as recovered.
+Identical calls whose time ranges overlap are reported as one aggregated
+overlap group, not as retries. Finding IDs are capped at 20 while `call_count`
+retains the complete group size.
+
+Identity uses the trimmed, case-normalized tool name and canonical JSON input.
+Analysis happens before optional redaction so replacing distinct credentials
+cannot merge unrelated calls. Findings never copy input or error values, but
+tool names and call IDs remain user-controlled identifiers and may be sensitive.
 
 ## Supported inputs
 
