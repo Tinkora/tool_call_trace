@@ -130,11 +130,34 @@ data detection. When redaction is requested but parsing fails, the browser and
 CLI suppress parser details that could contain user values. Safe JSON Pointer
 validation messages remain available.
 
+## Offline argument-validation contract
+
+The CLI accepts an optional `--tools FILE` containing an MCP `tools/list`
+result or the contained `tools` array. Tool names match exactly; no provider
+aliasing or equivalence is inferred. Each observed input is decoded when it is
+a JSON string and must resolve to an object before it is checked against the
+matching `inputSchema`.
+
+The deliberately limited schema evaluator supports a single string `type`,
+`required`, `properties`, boolean `additionalProperties`, `items`, `enum`,
+`minimum`, and `maximum`. Annotation keywords are accepted but do not affect
+validation. Other validation keywords, boolean schemas, and schema references
+are rejected at inventory load time rather than silently treated as valid.
+This is not a claim of JSON Schema draft compliance.
+
+Stable diagnostics are `ARG001_INVALID_JSON`, `ARG002_NON_OBJECT`,
+`ARG003_SCHEMA_MISMATCH`, `ARG004_UNKNOWN_TOOL`, and
+`ARG005_REPEATED_VALIDATION_FAILURE`. Repeated findings require three identical
+tool/code/reason failures. They retain the full count and at most 20 call IDs.
+Diagnostics never copy argument values. Analysis occurs before optional
+redaction; the normalized trace is redacted before JSON rendering. The feature
+never executes or repairs a call.
+
 ## Surfaces
 
 - Browser: format menu, off-by-default redaction, additional path input,
   announced replacement count, statistics, waterfall, tooltip, and details.
-- CLI: `tool-call-trace check [--format FORMAT] [--redact]
+- CLI: `tool-call-trace check [--format FORMAT] [--tools FILE] [--redact]
   [--redact-path POINTER] [FILE|-]` with JSON on stdout and diagnostics on
   stderr.
 - Rust: format-specific importers, structural auto-detection, normalized model,
@@ -157,7 +180,8 @@ validation messages remain available.
   `X-API-Key`, encoded JSON, free-text credentials, idempotence, preserved
   benign context, and secret-free redaction outcomes.
 - CLI process tests cover stdin and files, explicit and auto formats, exit
-  codes, JSON output, replacement counts, and secret-free failures.
+  codes, JSON output, replacement counts, argument validation, and secret-free
+  failures.
 - Chromium tests exercise compiled WASM at 375, 768, 1024, and 1440 pixels,
   including reparseable redacted output, details, tooltips, parser failures,
   keyboard focus, reduced motion, console output, external traffic, and

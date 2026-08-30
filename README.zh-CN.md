@@ -104,10 +104,18 @@ python3 -m http.server 4174 --bind 127.0.0.1 --directory crates/tool_call_trace_
 ```bash
 cargo run -p tool_call_trace_cli -- check --format auto trace.json
 cargo run -p tool_call_trace_cli -- check --redact - < trace.json
+cargo run -p tool_call_trace_cli -- check --tools tools.json trace.json
 ```
 
 成功时，归一化 JSON 写入 stdout；诊断和脱敏计数写入 stderr。无效 trace 契约返回
 退出码 `1`，无效命令用法返回退出码 `2`。
+
+`--tools FILE` 接受 MCP `tools/list` 结果对象或其中的 `tools` 数组。它会解码
+字符串形式的参数、要求参数为 JSON 对象、按工具名精确匹配，并报告 `ARG001` 至
+`ARG005`。校验器有意只支持单字符串 `type`、`required`、`properties`、布尔值
+`additionalProperties`、`items`、`enum`、`minimum` 和 `maximum`；包含其他校验
+关键字的 inventory 会被拒绝。这是有边界的兼容性检查，不是完整 JSON Schema
+草案实现。
 
 ## Generic 输入
 
@@ -137,6 +145,8 @@ cargo run -p tool_call_trace_cli -- check --redact - < trace.json
 - Exporter 导入以数据契约为边界，不会安装或插桩上游 SDK。
 - 脱敏必须显式开启且属于 best-effort；它会保留 trace ID 和 call ID，也不声称完整检测
   PII。
+- 参数校验仅离线提供建议；它不会执行、修复调用，也不会推断不同 provider 的工具
+  等价性。
 
 ## 开发
 

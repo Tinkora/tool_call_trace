@@ -1,4 +1,5 @@
 pub mod analyze;
+pub mod argument_validation;
 pub mod error;
 pub mod import;
 pub mod parse;
@@ -8,6 +9,10 @@ pub mod wasm;
 pub use analyze::{
     RetryFindingKind, RetryLoopFinding, TraceAnalysis, analyze, find_duplicate_calls,
     find_retry_loop_findings, find_slow_calls, full_analyze,
+};
+pub use argument_validation::{
+    ArgumentDiagnostic, ArgumentDiagnosticCode, ToolSchema, parse_tool_inventory,
+    validate_tool_arguments,
 };
 pub use error::CoreError;
 pub use import::{

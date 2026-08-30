@@ -6,6 +6,12 @@ All notable changes will be documented in this file. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Add bounded offline argument validation against an explicit MCP `tools/list`
+  inventory, with stable `ARG001` through `ARG005` diagnostics in the CLI JSON
+  report and text diagnostics.
+
 ## [0.2.3] - 2026-08-31
 
 ### Fixed

@@ -180,3 +180,72 @@ fn redaction_does_not_merge_distinct_inputs_into_a_retry_loop() {
     assert!(!rendered.contains("SECRET_B"));
     assert!(!rendered.contains("SECRET_C"));
 }
+
+#[test]
+fn validates_arguments_against_an_explicit_inventory() {
+    let trace_path = std::env::temp_dir().join(format!("trace-{}.json", std::process::id()));
+    let tools_path = std::env::temp_dir().join(format!("tools-{}.json", std::process::id()));
+    std::fs::write(&trace_path, r#"[{"id":"1","name":"search","input":{},"start_time_ms":0,"end_time_ms":1,"status":"error"}]"#).unwrap();
+    std::fs::write(
+        &tools_path,
+        r#"{"tools":[{"name":"search","inputSchema":{"type":"object","required":["query"]}}]}"#,
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_tool-call-trace"))
+        .args([
+            "check",
+            "--format",
+            "generic",
+            "--tools",
+            tools_path.to_str().unwrap(),
+            trace_path.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    std::fs::remove_file(trace_path).unwrap();
+    std::fs::remove_file(tools_path).unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["valid"], false);
+    assert_eq!(
+        report["argument_diagnostics"][0]["code"],
+        "ARG003_SCHEMA_MISMATCH"
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("ARG003_SCHEMA_MISMATCH"));
+}
+
+#[test]
+fn redacts_trace_before_rendering_argument_failures() {
+    let trace_path = std::env::temp_dir().join(format!("trace-secret-{}.json", std::process::id()));
+    let tools_path = std::env::temp_dir().join(format!("tools-secret-{}.json", std::process::id()));
+    std::fs::write(&trace_path, r#"[{"id":"1","name":"search","input":{"authorization":"Bearer TRACE_SECRET"},"start_time_ms":0,"end_time_ms":1,"status":"error"}]"#).unwrap();
+    std::fs::write(
+        &tools_path,
+        r#"{"tools":[{"name":"search","inputSchema":{"type":"object","required":["query"]}}]}"#,
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_tool-call-trace"))
+        .args([
+            "check",
+            "--redact",
+            "--tools",
+            tools_path.to_str().unwrap(),
+            trace_path.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    std::fs::remove_file(trace_path).unwrap();
+    std::fs::remove_file(tools_path).unwrap();
+
+    let rendered = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.status.code(), Some(1));
+    assert!(!rendered.contains("TRACE_SECRET"));
+    assert!(rendered.contains("ARG003_SCHEMA_MISMATCH"));
+}

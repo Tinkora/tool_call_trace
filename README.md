@@ -45,6 +45,8 @@ display.
 - Preserve trace and call IDs so investigations remain searchable.
 - Validate and normalize the same contracts from files or stdin with
   `tool-call-trace check`.
+- Optionally compare observed arguments with an explicit MCP `tools/list`
+  inventory without executing or rewriting any call.
 - Reject input above 5 MiB or 100,000 lines and traces above 2,000 calls.
 
 ## Retry-loop findings
@@ -116,11 +118,20 @@ Use `-` or omit the path to read stdin. `--format` accepts `auto`, `generic`,
 ```bash
 cargo run -p tool_call_trace_cli -- check --format auto trace.json
 cargo run -p tool_call_trace_cli -- check --redact - < trace.json
+cargo run -p tool_call_trace_cli -- check --tools tools.json trace.json
 ```
 
 Successful normalized JSON is written to stdout; diagnostics and redaction
 counts are written to stderr. The command exits with code `1` for invalid trace
 contracts and `2` for invalid command usage.
+
+`--tools FILE` accepts either an MCP `tools/list` result object or its `tools`
+array. It decodes string-encoded arguments, requires a JSON object, matches
+tool names exactly, and reports `ARG001` through `ARG005` diagnostics. The
+validator intentionally supports only single-string `type`, `required`,
+`properties`, boolean `additionalProperties`, `items`, `enum`, `minimum`, and
+`maximum`; inventories containing other validation keywords are rejected.
+This is a bounded compatibility check, not full JSON Schema draft validation.
 
 ## Generic input
 
@@ -153,6 +164,8 @@ the aliases `completed`, `failed`, and `in_progress` are also accepted.
   upstream SDKs.
 - Redaction is explicit and best-effort. It intentionally preserves trace and
   call IDs and does not claim exhaustive PII detection.
+- Argument validation is offline and advisory. It never executes, repairs, or
+  infers equivalent tools across providers.
 
 ## Development
 
