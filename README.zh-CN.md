@@ -16,14 +16,14 @@
 
 [打开浏览器工具](https://tinkora.github.io/tool_call_trace/)
 
-[下载 v0.2.3 及验证资产](https://github.com/Tinkora/tool_call_trace/releases/tag/v0.2.3)
+[下载 v0.2.4 及验证资产](https://github.com/Tinkora/tool_call_trace/releases/tag/v0.2.4)
 
 Tool Call Trace 是一个在浏览器本地运行的 AI Agent 工具调用瀑布流查看器和契约检查器。
 它可以导入 Generic JSON、OpenAI run steps、OpenAI Agents SDK span、LangChain Run
 和 PydanticAI/Logfire span，并且不会上传 trace。显式开启脱敏后，常见凭据和指定字段会
 在分析或显示前被替换。
 
-> 状态：预发布成熟度。`v0.2.3` 新增有界的重试循环和重叠重复调用诊断。
+> 状态：预发布成熟度。`v0.2.4` 新增离线参数校验。
 > 当前没有发布 Package 或 Agent transport。
 
 ## 当前能力
