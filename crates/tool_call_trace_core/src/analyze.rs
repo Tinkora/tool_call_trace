@@ -2,6 +2,149 @@ use crate::parse::{ToolCall, ToolCallLog};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+const DEFAULT_RETRY_FAILURE_THRESHOLD: usize = 3;
+
+/// A retry-related pattern found without exposing tool input or error values.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RetryLoopFinding {
+    pub kind: RetryFindingKind,
+    pub tool_name: String,
+    pub call_count: u32,
+    pub call_ids: Vec<String>,
+    pub message: String,
+}
+
+/// Stable machine-readable categories for retry-related findings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RetryFindingKind {
+    ConsecutiveFailures,
+    RecoveredRetryLoop,
+    OverlappingDuplicate,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct CanonicalCallKey {
+    tool_name: String,
+    input: String,
+}
+
+fn canonical_call_key(call: &ToolCall) -> CanonicalCallKey {
+    CanonicalCallKey {
+        tool_name: call.name.trim().to_lowercase(),
+        input: canonical_json(&call.input),
+    }
+}
+
+fn canonical_json(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut entries: Vec<_> = map.iter().collect();
+            entries.sort_by_key(|(key, _)| *key);
+            let body = entries
+                .into_iter()
+                .map(|(key, value)| {
+                    format!(
+                        "{}:{}",
+                        serde_json::to_string(key).unwrap_or_default(),
+                        canonical_json(value)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("{{{body}}}")
+        }
+        serde_json::Value::Array(values) => {
+            let body = values
+                .iter()
+                .map(canonical_json)
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("[{body}]")
+        }
+        _ => serde_json::to_string(value).unwrap_or_default(),
+    }
+}
+
+/// Detect retry loops and concurrent duplicate executions using a fixed threshold of three errors.
+pub fn find_retry_loop_findings(log: &ToolCallLog) -> Vec<RetryLoopFinding> {
+    let mut findings = Vec::new();
+    let calls = &log.calls;
+    let mut index = 0;
+
+    while index < calls.len() {
+        if calls[index].status != crate::parse::CallStatus::Error {
+            index += 1;
+            continue;
+        }
+        let key = canonical_call_key(&calls[index]);
+        let start = index;
+        while index < calls.len()
+            && calls[index].status == crate::parse::CallStatus::Error
+            && canonical_call_key(&calls[index]) == key
+        {
+            index += 1;
+        }
+        let failure_count = index - start;
+        if failure_count < DEFAULT_RETRY_FAILURE_THRESHOLD {
+            continue;
+        }
+
+        let recovered = index < calls.len()
+            && calls[index].status == crate::parse::CallStatus::Success
+            && canonical_call_key(&calls[index]) == key;
+        let end = index + usize::from(recovered);
+        let kind = if recovered {
+            RetryFindingKind::RecoveredRetryLoop
+        } else {
+            RetryFindingKind::ConsecutiveFailures
+        };
+        findings.push(RetryLoopFinding {
+            kind,
+            tool_name: key.tool_name,
+            call_count: (end - start) as u32,
+            call_ids: calls[start..end]
+                .iter()
+                .map(|call| call.id.clone())
+                .collect(),
+            message: if recovered {
+                format!("Repeated failures recovered after {failure_count} attempts")
+            } else {
+                format!("Detected {failure_count} consecutive failed attempts")
+            },
+        });
+        if recovered {
+            index += 1;
+        }
+    }
+
+    let mut active: HashMap<CanonicalCallKey, Vec<&ToolCall>> = HashMap::new();
+    for call in calls {
+        let key = canonical_call_key(call);
+        let overlapping: Vec<_> = active
+            .entry(key.clone())
+            .or_default()
+            .iter()
+            .copied()
+            .filter(|previous| previous.end_time_ms > call.start_time_ms)
+            .collect();
+        for previous in overlapping {
+            findings.push(RetryLoopFinding {
+                kind: RetryFindingKind::OverlappingDuplicate,
+                tool_name: key.tool_name.clone(),
+                call_count: 2,
+                call_ids: vec![previous.id.clone(), call.id.clone()],
+                message: "Identical tool calls overlap in time".into(),
+            });
+        }
+        let same_key = active.entry(key).or_default();
+        same_key.retain(|previous| previous.end_time_ms > call.start_time_ms);
+        same_key.push(call);
+    }
+
+    findings
+}
+
 /// Statistical analysis of a tool-call trace.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TraceAnalysis {
@@ -356,5 +499,142 @@ mod tests {
         let analysis = analyze(&log);
 
         assert_eq!(analysis.avg_duration_ms, u64::MAX as f64);
+    }
+
+    fn retry_call(
+        id: &str,
+        name: &str,
+        input: serde_json::Value,
+        status: CallStatus,
+        start_time_ms: u64,
+        end_time_ms: u64,
+    ) -> ToolCall {
+        ToolCall {
+            id: id.into(),
+            name: name.into(),
+            input,
+            output: None,
+            error: (status == CallStatus::Error).then(|| "sensitive upstream detail".into()),
+            start_time_ms,
+            end_time_ms,
+            duration_ms: end_time_ms - start_time_ms,
+            status,
+        }
+    }
+
+    #[test]
+    fn detects_three_consecutive_failures_with_canonical_name_and_input() {
+        let log = ToolCallLog {
+            trace_id: "retry-loop".into(),
+            calls: vec![
+                retry_call(
+                    "1",
+                    " Search ",
+                    serde_json::json!({"limit": 10, "query": "private"}),
+                    CallStatus::Error,
+                    0,
+                    10,
+                ),
+                retry_call(
+                    "2",
+                    "search",
+                    serde_json::json!({"query": "private", "limit": 10}),
+                    CallStatus::Error,
+                    10,
+                    20,
+                ),
+                retry_call(
+                    "3",
+                    "SEARCH",
+                    serde_json::json!({"limit": 10, "query": "private"}),
+                    CallStatus::Error,
+                    20,
+                    30,
+                ),
+            ],
+            total_time_ms: 30,
+            total_calls: 3,
+            error_count: 3,
+        };
+
+        let findings = find_retry_loop_findings(&log);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].kind, RetryFindingKind::ConsecutiveFailures);
+        assert_eq!(findings[0].tool_name, "search");
+        assert_eq!(findings[0].call_count, 3);
+        assert_eq!(findings[0].call_ids, ["1", "2", "3"]);
+        assert!(!findings[0].message.contains("private"));
+        assert!(!findings[0].message.contains("sensitive upstream detail"));
+    }
+
+    #[test]
+    fn detects_overlapping_duplicate_calls() {
+        let input = serde_json::json!({"path": "/private/file"});
+        let log = ToolCallLog {
+            trace_id: "overlap".into(),
+            calls: vec![
+                retry_call("1", "read_file", input.clone(), CallStatus::Success, 0, 20),
+                retry_call("2", "read_file", input, CallStatus::Success, 10, 30),
+            ],
+            total_time_ms: 30,
+            total_calls: 2,
+            error_count: 0,
+        };
+
+        let findings = find_retry_loop_findings(&log);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].kind, RetryFindingKind::OverlappingDuplicate);
+        assert_eq!(findings[0].call_ids, ["1", "2"]);
+        assert!(!findings[0].message.contains("/private/file"));
+    }
+
+    #[test]
+    fn reports_recovery_after_repeated_failures_but_not_repeated_successes() {
+        let input = serde_json::json!({"query": "same"});
+        let log = ToolCallLog {
+            trace_id: "recovered".into(),
+            calls: vec![
+                retry_call("1", "search", input.clone(), CallStatus::Error, 0, 10),
+                retry_call("2", "search", input.clone(), CallStatus::Error, 10, 20),
+                retry_call("3", "search", input.clone(), CallStatus::Error, 20, 30),
+                retry_call("4", "search", input.clone(), CallStatus::Success, 30, 40),
+                retry_call(
+                    "5",
+                    "other",
+                    serde_json::json!({}),
+                    CallStatus::Success,
+                    40,
+                    50,
+                ),
+                retry_call(
+                    "6",
+                    "other",
+                    serde_json::json!({}),
+                    CallStatus::Success,
+                    50,
+                    60,
+                ),
+                retry_call(
+                    "7",
+                    "other",
+                    serde_json::json!({}),
+                    CallStatus::Success,
+                    60,
+                    70,
+                ),
+            ],
+            total_time_ms: 70,
+            total_calls: 7,
+            error_count: 3,
+        };
+
+        let findings = find_retry_loop_findings(&log);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].kind, RetryFindingKind::RecoveredRetryLoop);
+        assert_eq!(findings[0].call_count, 4);
+        assert_eq!(findings[0].call_ids, ["1", "2", "3", "4"]);
     }
 }

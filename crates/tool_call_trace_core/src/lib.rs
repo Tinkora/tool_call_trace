@@ -5,7 +5,10 @@ pub mod parse;
 pub mod redact;
 pub mod wasm;
 
-pub use analyze::{TraceAnalysis, analyze, find_duplicate_calls, find_slow_calls, full_analyze};
+pub use analyze::{
+    RetryFindingKind, RetryLoopFinding, TraceAnalysis, analyze, find_duplicate_calls,
+    find_retry_loop_findings, find_slow_calls, full_analyze,
+};
 pub use error::CoreError;
 pub use import::{
     parse_agent_trace, parse_langchain_format, parse_openai_agents_format,
