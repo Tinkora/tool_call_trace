@@ -4,12 +4,14 @@ use std::io::{self, Read, Write};
 use std::process::ExitCode;
 use tool_call_trace_core::parse::MAX_INPUT_BYTES;
 use tool_call_trace_core::{
-    CoreError, RedactionConfig, RedactionOutcome, ToolCallLog, find_retry_loop_findings,
-    parse_agent_trace, parse_generic_array, parse_langchain_format, parse_openai_agents_format,
-    parse_openai_format, parse_pydantic_ai_logfire_format, redact_log,
+    ArgumentDiagnostic, CoreError, RedactionConfig, RedactionOutcome, ToolCallLog,
+    find_retry_loop_findings, parse_agent_trace, parse_generic_array, parse_langchain_format,
+    parse_openai_agents_format, parse_openai_format, parse_pydantic_ai_logfire_format,
+    parse_tool_inventory, redact_log, validate_tool_arguments,
 };
 
-const USAGE: &str = "Usage: tool-call-trace check [--format FORMAT] [--redact] [--redact-path POINTER] [FILE|-]\n\nFormats: auto, generic, openai-run-steps, openai-agents, langchain, pydantic-ai";
+const USAGE: &str = "Usage: tool-call-trace check [--format FORMAT] [--tools FILE] [--redact] [--redact-path POINTER] [FILE|-]\n\nFormats: auto, generic, openai-run-steps, openai-agents, langchain, pydantic-ai";
+const MAX_TEXT_DIAGNOSTICS: usize = 20;
 
 #[derive(Clone, Copy)]
 enum TraceFormat {
@@ -39,6 +41,7 @@ struct Options {
     format: TraceFormat,
     redact: bool,
     redaction_paths: Vec<String>,
+    tools: Option<String>,
     input: String,
 }
 
@@ -85,6 +88,7 @@ struct ContractReport {
     valid: bool,
     redacted_values: u32,
     retry_loop_findings: Vec<tool_call_trace_core::RetryLoopFinding>,
+    argument_diagnostics: Vec<ArgumentDiagnostic>,
     log: ToolCallLog,
 }
 
@@ -103,6 +107,7 @@ fn parse_options() -> Result<Option<Options>, CliError> {
     let mut format = TraceFormat::Auto;
     let mut redact = false;
     let mut redaction_paths = Vec::new();
+    let mut tools = None;
     let mut input = None;
     while let Some(argument) = args.next() {
         match argument.as_str() {
@@ -114,6 +119,17 @@ fn parse_options() -> Result<Option<Options>, CliError> {
                 format = TraceFormat::parse(&value)?;
             }
             "--redact" => redact = true,
+            "--tools" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| CliError::usage("--tools requires a file path"))?;
+                if value == "-" {
+                    return Err(CliError::usage("--tools must be a file, not stdin"));
+                }
+                if tools.replace(value).is_some() {
+                    return Err(CliError::usage("--tools may only be specified once"));
+                }
+            }
             "--redact-path" => {
                 redaction_paths.push(
                     args.next()
@@ -146,6 +162,7 @@ fn parse_options() -> Result<Option<Options>, CliError> {
         format,
         redact,
         redaction_paths,
+        tools,
         input: input.unwrap_or_else(|| "-".into()),
     }))
 }
@@ -196,6 +213,13 @@ fn execute(options: Options) -> Result<(), CliError> {
         }
     })?;
     let retry_loop_findings = find_retry_loop_findings(&log);
+    let argument_diagnostics = if let Some(path) = options.tools.as_deref() {
+        let inventory = read_input(path)?;
+        let tools = parse_tool_inventory(&inventory).map_err(CliError::contract)?;
+        validate_tool_arguments(&log, &tools)
+    } else {
+        Vec::new()
+    };
     let RedactionOutcome {
         log,
         redacted_values,
@@ -215,21 +239,61 @@ fn execute(options: Options) -> Result<(), CliError> {
     };
     let total_calls = log.total_calls;
     let report = ContractReport {
-        valid: true,
+        valid: argument_diagnostics.is_empty(),
         redacted_values,
         retry_loop_findings,
+        argument_diagnostics: argument_diagnostics.clone(),
         log,
     };
 
     serde_json::to_writer(io::stdout().lock(), &report)
         .map_err(|_| CliError::input("OUTPUT_ERROR: unable to write JSON"))?;
     println!();
-    eprintln!(
-        "valid: {total_calls} tool call{}, {redacted_values} value{} redacted",
-        if total_calls == 1 { "" } else { "s" },
-        if redacted_values == 1 { "" } else { "s" }
-    );
-    Ok(())
+    if argument_diagnostics.is_empty() {
+        eprintln!(
+            "valid: {total_calls} tool call{}, {redacted_values} value{} redacted",
+            if total_calls == 1 { "" } else { "s" },
+            if redacted_values == 1 { "" } else { "s" }
+        );
+        Ok(())
+    } else {
+        for diagnostic in argument_diagnostics.iter().take(MAX_TEXT_DIAGNOSTICS) {
+            eprintln!(
+                "{}: {} [{}]",
+                diagnostic.code.as_str(),
+                text_label(&diagnostic.message),
+                diagnostic
+                    .call_ids
+                    .iter()
+                    .map(|id| text_label(id))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            );
+        }
+        if argument_diagnostics.len() > MAX_TEXT_DIAGNOSTICS {
+            eprintln!(
+                "... {} additional argument diagnostics omitted from text output",
+                argument_diagnostics.len() - MAX_TEXT_DIAGNOSTICS
+            );
+        }
+        Err(CliError::input(format!(
+            "argument validation failed with {} diagnostic{}",
+            argument_diagnostics.len(),
+            if argument_diagnostics.len() == 1 {
+                ""
+            } else {
+                "s"
+            }
+        )))
+    }
+}
+
+fn text_label(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(160)
+        .collect()
 }
 
 fn main() -> ExitCode {

@@ -110,11 +110,30 @@ Anthropic message block 不提供调用开始和结束时间，因此继续明�
 脱敏具有幂等性，但不声称完整检测凭据或个人数据。如果已经请求脱敏但解析失败，浏览器和
 CLI 会隐藏可能包含用户值的 parser 详情；安全的 JSON Pointer 校验信息仍会显示。
 
+## 离线参数校验契约
+
+CLI 可通过 `--tools FILE` 接收 MCP `tools/list` 结果或其中的 `tools` 数组。工具名
+精确匹配，不推断 provider 别名或等价关系。观察到的 input 如果是 JSON 字符串会先
+安全解码，并且必须得到对象，然后才与匹配工具的 `inputSchema` 比较。
+
+这个刻意受限的 schema evaluator 支持单字符串 `type`、`required`、`properties`、
+布尔值 `additionalProperties`、`items`、`enum`、`minimum` 和 `maximum`。注解关键字
+可以存在但不参与校验。其他校验关键字、布尔 schema 与 schema 引用会在加载
+inventory 时被拒绝，而不是被静默当作有效。本功能不宣称符合完整 JSON Schema
+草案。
+
+稳定诊断码为 `ARG001_INVALID_JSON`、`ARG002_NON_OBJECT`、
+`ARG003_SCHEMA_MISMATCH`、`ARG004_UNKNOWN_TOOL` 和
+`ARG005_REPEATED_VALIDATION_FAILURE`。重复 finding 需要至少三次相同的
+工具名/诊断码/原因组合，保留完整计数和最多 20 个 call ID。诊断不会复制参数值。
+分析发生在可选脱敏之前，归一化 trace 在 JSON 渲染前脱敏。该功能不会执行或修复
+任何调用。
+
 ## 对外接口
 
 - 浏览器：format menu、默认关闭的脱敏、附加路径输入、替换数量播报、统计、瀑布流、
   tooltip 和详情。
-- CLI：`tool-call-trace check [--format FORMAT] [--redact]
+- CLI：`tool-call-trace check [--format FORMAT] [--tools FILE] [--redact]
   [--redact-path POINTER] [FILE|-]`，JSON 写入 stdout，诊断写入 stderr。
 - Rust：格式专用 importer、结构化自动检测、归一化模型、脱敏和分析。
 - WASM：供浏览器使用的 JSON-compatible 解析、脱敏和分析函数。
@@ -132,8 +151,8 @@ CLI 会隐藏可能包含用户值的 parser 详情；安全的 JSON Pointer 校
 - Rust 契约测试覆盖五种格式、时间归一化、pending/error 映射、重复 ID、资源上限、
   配置路径、`X-API-Key`、编码 JSON、自由文本凭据、幂等性、保留的非敏感上下文和
   无 secret 的脱敏结果。
-- CLI 进程测试覆盖 stdin 和文件、显式与自动格式、退出码、JSON 输出、替换数量和无
-  secret 的失败信息。
+- CLI 进程测试覆盖 stdin 和文件、显式与自动格式、退出码、JSON 输出、替换数量、参数
+  校验和无 secret 的失败信息。
 - Chromium 测试在 375、768、1024 和 1440 像素宽度下验证编译后的 WASM，包括可再次
   解析的脱敏输出、详情、tooltip、parser 失败、键盘焦点、reduced motion、console、
   外部请求和横向溢出。
