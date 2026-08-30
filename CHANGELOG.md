@@ -6,6 +6,13 @@ All notable changes will be documented in this file. The format follows
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-08-31
+
+### Fixed
+
+- Align release artifact lookup with the reusable WASM quality workflow so the
+  tagged release can assemble its verified browser archive.
+
 ## [0.2.2] - 2026-08-31
 
 ### Added
@@ -81,7 +88,8 @@ All notable changes will be documented in this file. The format follows
 - Removed fabricated Anthropic timing support and unimplemented MCP tool
   declarations.
 
-[Unreleased]: https://github.com/Tinkora/tool_call_trace/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/Tinkora/tool_call_trace/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/Tinkora/tool_call_trace/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/Tinkora/tool_call_trace/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Tinkora/tool_call_trace/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Tinkora/tool_call_trace/compare/v0.1.0...v0.2.0

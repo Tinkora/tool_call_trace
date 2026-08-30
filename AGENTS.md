@@ -7,7 +7,7 @@ tool calls with a local contract-checking CLI. It accepts strict Generic JSON,
 OpenAI run steps, OpenAI Agents spans, LangChain Runs, and PydanticAI/Logfire
 spans. Do not claim Anthropic timing support, a hosted service, an MCP server,
 an executable Agent tool, exhaustive redaction, or a package release.
-Redaction is explicit and best-effort. `v0.2.2` is the current static browser
+Redaction is explicit and best-effort. `v0.2.3` is the current static browser
 and CLI release.
 
 ## Architecture
