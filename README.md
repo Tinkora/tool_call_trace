@@ -20,7 +20,7 @@
 
 [Open the browser tool](https://tinkora.github.io/tool_call_trace/)
 
-[Download v0.2.2 and verification assets](https://github.com/Tinkora/tool_call_trace/releases/tag/v0.2.2)
+[Download v0.2.3 and verification assets](https://github.com/Tinkora/tool_call_trace/releases/tag/v0.2.3)
 
 A browser-local waterfall viewer and contract checker for timestamped AI Agent
 tool calls. It imports Generic JSON, OpenAI run steps, OpenAI Agents SDK spans,
@@ -28,7 +28,7 @@ LangChain Runs, and PydanticAI/Logfire spans without uploading the trace. Opt-in
 redaction removes common credentials and selected fields before analysis or
 display.
 
-> Status: pre-release maturity. `v0.2.2` adds bounded retry-loop and overlapping
+> Status: pre-release maturity. `v0.2.3` adds bounded retry-loop and overlapping
 > duplicate findings. No package or Agent transport is published.
 
 ## Current capabilities
